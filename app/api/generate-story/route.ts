@@ -315,53 +315,28 @@ export async function POST(req: Request) {
   const systemPrompt = buildSystemPrompt(pageCount, language);
   const userPrompt = `Write a ${pageCount}-page bedtime story for a child named ${rawName}. The theme is: ${themePhrase}. Write the entire story in ${LANGUAGE_NAME[language]}.`;
 
-  // Stream the response so Vercel's edge connection stays alive while we
-  // wait for the LLM. A heartbeat comment is sent every 5 s so the
-  // connection is never considered idle. All models are raced in parallel —
-  // the first to succeed wins, avoiding sequential queue-wait stacking.
-  const encoder = new TextEncoder();
-
-  const stream = new ReadableStream({
-    async start(controller) {
-      const enqueue = (line: string) =>
-        controller.enqueue(encoder.encode(line));
-
-      // Keep the connection warm while the LLM thinks
-      const heartbeat = setInterval(
-        () => enqueue(": heartbeat\n\n"),
-        5_000,
-      );
-
-      try {
-        const story = await withTimeout(
-          Promise.any(
-            MODELS.map((model) =>
-              tryGenerate(apiKey, model, systemPrompt, userPrompt, pageCount),
-            ),
-          ),
-          MODEL_TIMEOUT_MS,
-        );
-        enqueue(`data: ${JSON.stringify(story)}\n\n`);
-      } catch (err) {
-        console.error("All models failed:", err instanceof Error ? err.message : err);
-        enqueue(
-          `data: ${JSON.stringify({
-            error:
-              "The storyteller is having a quiet moment. Please try again — sometimes a second try is all it takes.",
-          })}\n\n`,
-        );
-      } finally {
-        clearInterval(heartbeat);
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      "X-Accel-Buffering": "no",
-    },
-  });
+  // Race all models in parallel — fastest wins. Plain JSON response is
+  // simpler and universally compatible (SSE streaming had issues on iOS
+  // Safari). The 30 s Edge budget + 25 s per-model timeout is enough
+  // headroom without needing a streaming keep-alive.
+  try {
+    const story = await withTimeout(
+      Promise.any(
+        MODELS.map((model) =>
+          tryGenerate(apiKey, model, systemPrompt, userPrompt, pageCount),
+        ),
+      ),
+      MODEL_TIMEOUT_MS,
+    );
+    return NextResponse.json(story);
+  } catch (err) {
+    console.error("All models failed:", err instanceof Error ? err.message : err);
+    return NextResponse.json(
+      {
+        error:
+          "The storyteller is having a quiet moment. Please try again — sometimes a second try is all it takes.",
+      },
+      { status: 502 },
+    );
+  }
 }

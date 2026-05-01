@@ -20,8 +20,14 @@ export const metadata: Metadata = {
 };
 
 // App identity — shown at ~33 % opacity so it's present but unobtrusive.
-const APP_VERSION = "v1.5";
+// BUILD_TIME is evaluated at Next.js build time (static page), so it acts
+// as a deployment timestamp — change it to confirm a new deploy is live.
+const APP_VERSION = "v1.6";
 const APP_CREATOR = "C.L.R.";
+const BUILD_TIME = new Date()
+  .toISOString()
+  .replace("T", " ")
+  .slice(0, 16) + " UTC";
 
 export default function RootLayout({
   children,
@@ -46,6 +52,8 @@ export default function RootLayout({
           {APP_CREATOR}
           <br />
           <span className="text-[9px] tracking-wider">{APP_VERSION}</span>
+          <br />
+          <span className="text-[8px] tracking-normal opacity-80">{BUILD_TIME}</span>
         </div>
       </body>
     </html>
