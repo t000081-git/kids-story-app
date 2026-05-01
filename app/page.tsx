@@ -6,7 +6,7 @@ export default function Home() {
   return (
     <>
       <NightSky />
-      <main className="relative flex flex-1 flex-col items-center justify-center px-4 py-4 sm:px-6 sm:py-16">
+      <main className="relative flex flex-1 flex-col items-center justify-center px-4 py-3 sm:px-6 sm:py-4 overflow-hidden">
         <StoryApp />
       </main>
       <NightSounds />

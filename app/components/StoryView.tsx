@@ -3,12 +3,13 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { Language, Story, Theme } from "./StoryApp";
+import type { SavedStory, ShareableStory } from "@/lib/saved-stories";
+import { buildShareUrl } from "@/lib/saved-stories";
 
 // ─── Magic Ink animation ─────────────────────────────────────────────────────
 // framer-motion v12 changed variant propagation from parent → child motion
-// elements, making staggerChildren unreliable when children are wrapped in
-// Fragments with text nodes. We now use EXPLICIT props on every span so
-// nothing depends on parent-to-child variant inheritance.
+// elements, making staggerChildren unreliable through Fragments.
+// Every word carries its own explicit animation props.
 //
 // Container: only responsible for the collective exit fade.
 const inkContainerExit = {
@@ -103,13 +104,11 @@ function pickBestVoice(
     v.lang.toLowerCase().startsWith(langPrefix),
   );
   if (matching.length === 0) {
-    // Fallback: first English voice if language has no installed voice.
     return (
       voices.find((v) => v.lang.toLowerCase().startsWith("en") && v.default) ??
       voices.find((v) => v.lang.toLowerCase().startsWith("en"))
     );
   }
-
   const tiers: RegExp[] = [
     /premium|enhanced|neural/i,
     /(google|microsoft).*/i,
@@ -124,7 +123,9 @@ function pickBestVoice(
 
 // Split text into segments preserving whitespace, with character offsets
 // matching the original string. Used for karaoke-style word highlighting.
-function splitWords(text: string): { word: string; ws: string; start: number; end: number }[] {
+function splitWords(
+  text: string,
+): { word: string; ws: string; start: number; end: number }[] {
   const out: { word: string; ws: string; start: number; end: number }[] = [];
   const re = /(\S+)(\s*)/g;
   let m: RegExpExecArray | null;
@@ -144,11 +145,13 @@ export default function StoryView({
   theme,
   language,
   onWriteAnother,
+  onSave,
 }: {
   story: Story;
   theme: Theme | string;
   language: Language;
   onWriteAnother: () => void;
+  onSave?: (entry: Omit<SavedStory, "id" | "savedAt">) => void;
 }) {
   const [pageIdx, setPageIdx] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -157,6 +160,13 @@ export default function StoryView({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [highlightCharIdx, setHighlightCharIdx] = useState(-1);
+
+  // Rating + save state
+  const [rating, setRating] = useState(0);
+  const [hoveredStar, setHoveredStar] = useState(0);
+  const [saved, setSaved] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Respect the OS "reduce motion" accessibility setting.
   const prefersReduced = useReducedMotion();
@@ -232,23 +242,17 @@ export default function StoryView({
     }
 
     // ── Karaoke highlight ────────────────────────────────────────────────────
-    // Strategy: start the time-based fallback immediately when speak() is
-    // called (after a 150 ms grace period for speech to actually begin).
-    // If the browser fires native onboundary events (Chrome / Firefox desktop),
-    // the fallback self-cancels and native events take over.
-    // This avoids relying on utterance.onstart, which iOS Safari fires
-    // inconsistently — meaning the old "wait for onstart then check" approach
-    // would silently never start the fallback on iPhone/iPad.
+    // Unconditional 300 ms grace period after speak() — no reliance on
+    // utterance.onstart, which iOS Safari fires inconsistently.
     const pageText = story.pages[pageIdx];
     let boundaryFired = false;
     let fallbackId: ReturnType<typeof setInterval> | null = null;
 
-    const gracePeriod = setTimeout(() => {  // 300 ms: enough for iOS to queue & start speech
+    const gracePeriod = setTimeout(() => {
       const startTime = Date.now();
       const charsPerMs = (13 * utterance.rate) / 1000;
       fallbackId = setInterval(() => {
         if (boundaryFired) {
-          // Native events are working — hand off and stop polling
           clearInterval(fallbackId!);
           fallbackId = null;
           return;
@@ -263,7 +267,7 @@ export default function StoryView({
 
     utterance.onboundary = (event: SpeechSynthesisEvent) => {
       if (event.name === "word" || event.name === "sentence") {
-        boundaryFired = true; // signals the fallback interval to stop
+        boundaryFired = true;
         setHighlightCharIdx(event.charIndex);
       }
     };
@@ -281,22 +285,56 @@ export default function StoryView({
     setIsPlaying(true);
   }
 
+  function handleSave() {
+    if (!onSave || rating === 0) return;
+    onSave({ title: story.title, pages: story.pages, theme, language, rating });
+    setSaved(true);
+  }
+
+  function handleShare() {
+    const shareable: ShareableStory = {
+      title: story.title,
+      pages: story.pages,
+      theme,
+      language,
+    };
+    const url = buildShareUrl(shareable);
+    setShareUrl(url);
+    navigator.clipboard?.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    });
+  }
+
   return (
-    <div className="w-full max-w-2xl">
-      <div className="rounded-2xl border-2 border-amber-900/15 bg-amber-50/80 p-3 sm:p-6 md:p-10 shadow-lg shadow-amber-900/10 flex flex-col">
-        <h1 className="text-xl sm:text-3xl md:text-4xl text-amber-900 mb-0.5 sm:mb-2 text-center tracking-tight">
+    // Root: flex column capped to the viewport so nothing ever pushes off-screen.
+    <div
+      className="w-full max-w-2xl flex flex-col gap-2"
+      style={{ maxHeight: "calc(100dvh - 1.5rem)" }}
+    >
+      {/* ── Story card ────────────────────────────────────────────────────── */}
+      <div className="flex-1 min-h-0 rounded-2xl border-2 border-amber-900/15 bg-amber-50/80 p-3 sm:p-5 shadow-lg shadow-amber-900/10 flex flex-col overflow-hidden">
+
+        {/* Title */}
+        <h1 className="flex-shrink-0 text-xl sm:text-3xl md:text-4xl text-amber-900 mb-0.5 sm:mb-1 text-center tracking-tight">
           {story.title}
         </h1>
-        <p className="text-xs sm:text-sm text-amber-800/60 mb-2 sm:mb-6 text-center italic">
+
+        {/* Page counter */}
+        <p className="flex-shrink-0 text-xs sm:text-sm text-amber-800/60 mb-2 sm:mb-3 text-center italic">
           Page {pageIdx + 1} of {total}
         </p>
 
-        <div className="relative w-full overflow-hidden rounded-xl border-2 border-amber-900/15 aspect-[5/3] sm:aspect-[3/2] mb-2 sm:mb-6">
+        {/* Illustration ─ fixed height cap so it never crowds the text */}
+        <div
+          className="flex-shrink-0 relative w-full overflow-hidden rounded-xl border-2 border-amber-900/15 mb-2 sm:mb-3 aspect-[5/3]"
+          style={{ maxHeight: "min(38vh, 260px)" }}
+        >
           {imageError ? (
             <div
               className={`h-full w-full bg-gradient-to-br ${gradientFor(theme)} flex items-center justify-center`}
             >
-              <div className="flex gap-2 text-5xl sm:text-6xl md:text-7xl drop-shadow-sm">
+              <div className="flex gap-2 text-5xl sm:text-6xl drop-shadow-sm">
                 {(() => {
                   const e = emojiFor(theme);
                   return [
@@ -333,13 +371,21 @@ export default function StoryView({
           )}
         </div>
 
-        <div className="min-h-[4rem] sm:min-h-[8rem] flex items-center justify-center">
+        {/* Story text — flex-1 so it fills whatever space remains.
+            overflow-hidden prevents clipping from scrolling; py-2 gives
+            a 8 px buffer so the Magic Ink words' initial y:12 offset
+            doesn't clip at the container edges. */}
+        <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden py-2">
           <AnimatePresence mode="wait">
             <motion.p
               key={pageIdx}
               initial={{ opacity: 1 }}
               animate={{ opacity: 1 }}
-              exit={prefersReduced ? { opacity: 0, transition: { duration: 0.15 } } : inkContainerExit}
+              exit={
+                prefersReduced
+                  ? { opacity: 0, transition: { duration: 0.15 } }
+                  : inkContainerExit
+              }
               className="text-sm sm:text-xl md:text-2xl leading-relaxed text-amber-950 text-center"
             >
               {wordSegments.map((s, idx) => {
@@ -351,8 +397,6 @@ export default function StoryView({
                   <Fragment key={idx}>
                     <motion.span
                       // Explicit props — no variant inheritance from parent.
-                      // Each word controls its own enter animation so framer-motion
-                      // v12 propagation quirks can't silently break it.
                       initial={prefersReduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
                       animate={prefersReduced ? { opacity: 1 } : { opacity: 1, y: 0 }}
                       transition={
@@ -379,11 +423,57 @@ export default function StoryView({
           </AnimatePresence>
         </div>
 
+        {/* Rating section — only shows on the last page */}
+        {isLast && (
+          <div className="flex-shrink-0 pt-1.5 sm:pt-2 border-t border-amber-900/10 flex flex-col items-center gap-1">
+            {!saved ? (
+              <>
+                <p className="text-xs text-amber-700/75 italic">
+                  Did you enjoy this story?
+                </p>
+                <div className="flex gap-0.5 sm:gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      onClick={() => setRating(star)}
+                      onMouseEnter={() => setHoveredStar(star)}
+                      onMouseLeave={() => setHoveredStar(0)}
+                      className="text-xl sm:text-2xl transition-transform hover:scale-110 active:scale-95 leading-none select-none px-0.5"
+                      aria-label={`${star} star${star > 1 ? "s" : ""}`}
+                    >
+                      {star <= (hoveredStar || rating) ? "⭐" : "☆"}
+                    </button>
+                  ))}
+                </div>
+                {rating > 0 && (
+                  <button
+                    onClick={handleSave}
+                    className="text-xs rounded-full border border-amber-700/35 px-3 py-0.5 text-amber-800 hover:bg-amber-100/50 transition-colors"
+                  >
+                    💾 Save this story
+                  </button>
+                )}
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-amber-700 italic">✨ Saved!</p>
+                <button
+                  onClick={handleShare}
+                  className="text-xs rounded-full border border-amber-700/35 px-3 py-0.5 text-amber-800 hover:bg-amber-100/50 transition-colors"
+                >
+                  {copied ? "✓ Link copied!" : "🔗 Share link"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Read to me */}
         {supported && (
-          <div className="mt-2 sm:mt-6 flex justify-center">
+          <div className="flex-shrink-0 flex justify-center pt-1.5 sm:pt-2">
             <button
               onClick={handleListen}
-              className="rounded-full border-2 border-amber-900/30 px-5 sm:px-6 py-1.5 sm:py-2 text-sm sm:text-base text-amber-900 transition-colors hover:bg-amber-900/5"
+              className="rounded-full border-2 border-amber-900/30 px-5 sm:px-6 py-1 sm:py-1.5 text-sm sm:text-base text-amber-900 transition-colors hover:bg-amber-900/5"
             >
               {isPlaying ? "■ Stop" : "▶ Read to me"}
             </button>
@@ -391,7 +481,8 @@ export default function StoryView({
         )}
       </div>
 
-      <div className="mt-2 sm:mt-6 flex items-center justify-between gap-2">
+      {/* ── Navigation — outside the card, always at the same position ───── */}
+      <div className="flex-shrink-0 flex items-center justify-between gap-2">
         <button
           onClick={() => setPageIdx((i) => Math.max(0, i - 1))}
           disabled={isFirst}

@@ -3,6 +3,13 @@
 import { useEffect, useState } from "react";
 import StoryForm from "./StoryForm";
 import StoryView from "./StoryView";
+import {
+  listSavedStories,
+  saveStory,
+  readSharedStoryFromHash,
+  clearShareHash,
+} from "@/lib/saved-stories";
+import type { SavedStory } from "@/lib/saved-stories";
 
 export type Theme =
   | "animals"
@@ -59,6 +66,7 @@ export default function StoryApp() {
   const [theme, setTheme] = useState<string>("animals");
   const [language, setLanguage] = useState<Language>("en");
   const [error, setError] = useState<string>("");
+  const [savedStories, setSavedStories] = useState<SavedStory[]>([]);
 
   // Dispatch a mode event so the ambient soundscape can lower its
   // volume during the storytelling phase.
@@ -67,6 +75,20 @@ export default function StoryApp() {
     window.__ksMode = mode;
     window.dispatchEvent(new CustomEvent("ks-mode", { detail: { mode } }));
   }, [status, story]);
+
+  // Load saved stories + handle incoming share links on mount.
+  useEffect(() => {
+    setSavedStories(listSavedStories());
+
+    const shared = readSharedStoryFromHash();
+    if (shared) {
+      clearShareHash();
+      setStory({ title: shared.title, pages: shared.pages });
+      setTheme(shared.theme);
+      setLanguage(shared.language as Language);
+      setStatus("done");
+    }
+  }, []);
 
   async function generate(req: StoryRequest) {
     setStatus("loading");
@@ -100,6 +122,19 @@ export default function StoryApp() {
     setError("");
   }
 
+  function handleSaveStory(entry: Omit<SavedStory, "id" | "savedAt">) {
+    saveStory(entry);
+    setSavedStories(listSavedStories());
+  }
+
+  function handleLoadSaved(saved: SavedStory) {
+    setStory({ title: saved.title, pages: saved.pages });
+    setTheme(saved.theme);
+    setLanguage(saved.language as Language);
+    setStatus("done");
+    setError("");
+  }
+
   if (status === "done" && story) {
     return (
       <StoryView
@@ -107,6 +142,7 @@ export default function StoryApp() {
         theme={theme as Theme}
         language={language}
         onWriteAnother={reset}
+        onSave={handleSaveStory}
       />
     );
   }
@@ -116,6 +152,8 @@ export default function StoryApp() {
       onSubmit={generate}
       isLoading={status === "loading"}
       error={error}
+      savedStories={savedStories}
+      onLoadSaved={handleLoadSaved}
     />
   );
 }

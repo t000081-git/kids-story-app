@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import type { Language, Length, StoryRequest, Theme } from "./StoryApp";
+import type { SavedStory } from "@/lib/saved-stories";
 
 const LANGUAGES: { code: Language; label: string }[] = [
   { code: "en", label: "English" },
@@ -51,10 +52,14 @@ export default function StoryForm({
   onSubmit,
   isLoading,
   error,
+  savedStories = [],
+  onLoadSaved,
 }: {
   onSubmit: (req: StoryRequest) => void;
   isLoading: boolean;
   error: string;
+  savedStories?: SavedStory[];
+  onLoadSaved?: (saved: SavedStory) => void;
 }) {
   const [name, setName] = useState("");
   const [theme, setTheme] = useState<Theme>("animals");
@@ -250,6 +255,35 @@ export default function StoryForm({
 
       {error && (
         <p className="mt-6 text-amber-100 italic">{error}</p>
+      )}
+
+      {/* Saved stories — horizontal chip rail, hidden when empty */}
+      {savedStories.length > 0 && onLoadSaved && (
+        <div className="mt-6 sm:mt-8 flex flex-col gap-2 border-t border-amber-100/15 pt-4">
+          <span className="text-sm text-amber-50/70 text-left">
+            📖 My saved stories
+          </span>
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+            {savedStories.map((saved) => (
+              <button
+                key={saved.id}
+                type="button"
+                onClick={() => onLoadSaved(saved)}
+                disabled={isLoading}
+                className="flex-shrink-0 w-36 rounded-xl border border-amber-100/20 bg-white/5 p-2.5 text-left hover:bg-white/10 focus:outline-none focus:border-amber-200 transition-colors backdrop-blur-sm disabled:opacity-50"
+              >
+                <div className="text-xs text-amber-50 leading-snug line-clamp-2">
+                  {saved.title}
+                </div>
+                <div className="text-[10px] text-amber-50/50 mt-1 flex items-center gap-1">
+                  <span>{"⭐".repeat(saved.rating)}</span>
+                  <span>·</span>
+                  <span>{new Date(saved.savedAt).toLocaleDateString()}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
