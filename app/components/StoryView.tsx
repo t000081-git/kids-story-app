@@ -243,7 +243,7 @@ export default function StoryView({
     let boundaryFired = false;
     let fallbackId: ReturnType<typeof setInterval> | null = null;
 
-    const gracePeriod = setTimeout(() => {
+    const gracePeriod = setTimeout(() => {  // 300 ms: enough for iOS to queue & start speech
       const startTime = Date.now();
       const charsPerMs = (13 * utterance.rate) / 1000;
       fallbackId = setInterval(() => {
@@ -259,7 +259,7 @@ export default function StoryView({
         );
         setHighlightCharIdx(pos);
       }, 80);
-    }, 150);
+    }, 300);
 
     utterance.onboundary = (event: SpeechSynthesisEvent) => {
       if (event.name === "word" || event.name === "sentence") {
@@ -337,8 +337,8 @@ export default function StoryView({
           <AnimatePresence mode="wait">
             <motion.p
               key={pageIdx}
-              initial={false}
-              animate={{}}
+              initial={{ opacity: 1 }}
+              animate={{ opacity: 1 }}
               exit={prefersReduced ? { opacity: 0, transition: { duration: 0.15 } } : inkContainerExit}
               className="text-sm sm:text-xl md:text-2xl leading-relaxed text-amber-950 text-center"
             >
