@@ -4,41 +4,16 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { Language, Story, Theme } from "./StoryApp";
 
-// ─── Magic Ink animation variants ────────────────────────────────────────────
-// Container: orchestrates the word-by-word stagger and handles page exit.
-const inkContainerVariants = {
-  hidden: { opacity: 1 }, // container itself stays visible; words handle opacity
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.03,   // 30 ms between each word blooming
-      delayChildren: 0.06,     // slight pause before the first word
-    },
-  },
-  exit: {
-    opacity: 0,
-    transition: { duration: 0.18, ease: "easeIn" as const },
-  },
-};
-
-// Each word: fades in and rises 12 px — like ink soaking into paper.
-// Blur was removed: animating filter:blur on dozens of inline-block spans
-// forces a separate GPU compositing layer per word and is silently dropped
-// by mobile Safari. opacity + translateY is equally evocative and runs
-// at full 60 fps on every device.
-const inkWordVariants = {
-  hidden: {
-    opacity: 0,
-    y: 12,
-  },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      duration: 0.45,
-      ease: [0.16, 1, 0.3, 1] as const, // fast rise, gentle settle
-    },
-  },
+// ─── Magic Ink animation ─────────────────────────────────────────────────────
+// framer-motion v12 changed variant propagation from parent → child motion
+// elements, making staggerChildren unreliable when children are wrapped in
+// Fragments with text nodes. We now use EXPLICIT props on every span so
+// nothing depends on parent-to-child variant inheritance.
+//
+// Container: only responsible for the collective exit fade.
+const inkContainerExit = {
+  opacity: 0,
+  transition: { duration: 0.18, ease: "easeIn" as const },
 };
 
 const LANG_BCP47: Record<Language, string> = {
@@ -362,11 +337,9 @@ export default function StoryView({
           <AnimatePresence mode="wait">
             <motion.p
               key={pageIdx}
-              variants={prefersReduced ? undefined : inkContainerVariants}
-              initial={prefersReduced ? { opacity: 0 } : "hidden"}
-              animate={prefersReduced ? { opacity: 1 } : "visible"}
-              exit={prefersReduced ? { opacity: 0 } : "exit"}
-              transition={prefersReduced ? { duration: 0.15 } : undefined}
+              initial={false}
+              animate={{}}
+              exit={prefersReduced ? { opacity: 0, transition: { duration: 0.15 } } : inkContainerExit}
               className="text-sm sm:text-xl md:text-2xl leading-relaxed text-amber-950 text-center"
             >
               {wordSegments.map((s, idx) => {
@@ -377,7 +350,20 @@ export default function StoryView({
                 return (
                   <Fragment key={idx}>
                     <motion.span
-                      variants={prefersReduced ? undefined : inkWordVariants}
+                      // Explicit props — no variant inheritance from parent.
+                      // Each word controls its own enter animation so framer-motion
+                      // v12 propagation quirks can't silently break it.
+                      initial={prefersReduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
+                      animate={prefersReduced ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                      transition={
+                        prefersReduced
+                          ? { duration: 0.15 }
+                          : {
+                              duration: 0.45,
+                              delay: idx * 0.03,
+                              ease: [0.16, 1, 0.3, 1],
+                            }
+                      }
                       className={isActive ? "kid-highlight" : undefined}
                       // inline-block so CSS transforms (y offset) apply in
                       // Safari/iOS — plain "inline" silently drops transforms
