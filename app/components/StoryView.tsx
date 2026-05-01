@@ -1,7 +1,43 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { Language, Story, Theme } from "./StoryApp";
+
+// ─── Magic Ink animation variants ────────────────────────────────────────────
+// Container: orchestrates the word-by-word stagger and handles page exit.
+const inkContainerVariants = {
+  hidden: { opacity: 1 }, // container itself stays visible; words handle opacity
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.03,   // 30 ms between each word blooming
+      delayChildren: 0.06,     // slight pause before the first word
+    },
+  },
+  exit: {
+    opacity: 0,
+    transition: { duration: 0.18, ease: "easeIn" as const },
+  },
+};
+
+// Each word: fades in, rises 7 px, and un-blurs — like ink soaking into paper.
+const inkWordVariants = {
+  hidden: {
+    opacity: 0,
+    y: 7,
+    filter: "blur(4px)",
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    filter: "blur(0px)",
+    transition: {
+      duration: 0.5,
+      ease: [0.16, 1, 0.3, 1] as const, // fast rise, gentle settle
+    },
+  },
+};
 
 const LANG_BCP47: Record<Language, string> = {
   en: "en-US",
@@ -144,6 +180,9 @@ export default function StoryView({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [highlightCharIdx, setHighlightCharIdx] = useState(-1);
+
+  // Respect the OS "reduce motion" accessibility setting.
+  const prefersReduced = useReducedMotion();
 
   const wordSegments = useMemo(
     () => splitWords(story.pages[pageIdx]),
@@ -289,22 +328,37 @@ export default function StoryView({
         </div>
 
         <div className="min-h-[4rem] sm:min-h-[8rem] flex items-center justify-center">
-          <p className="text-sm sm:text-xl md:text-2xl leading-relaxed text-amber-950 text-center">
-            {wordSegments.map((s, idx) => {
-              const isActive =
-                isPlaying &&
-                highlightCharIdx >= s.start &&
-                highlightCharIdx < s.end;
-              return (
-                <Fragment key={idx}>
-                  <span className={isActive ? "kid-highlight" : undefined}>
-                    {s.word}
-                  </span>
-                  {s.ws}
-                </Fragment>
-              );
-            })}
-          </p>
+          <AnimatePresence mode="wait">
+            <motion.p
+              key={pageIdx}
+              variants={prefersReduced ? undefined : inkContainerVariants}
+              initial={prefersReduced ? { opacity: 0 } : "hidden"}
+              animate={prefersReduced ? { opacity: 1 } : "visible"}
+              exit={prefersReduced ? { opacity: 0 } : "exit"}
+              transition={prefersReduced ? { duration: 0.15 } : undefined}
+              className="text-sm sm:text-xl md:text-2xl leading-relaxed text-amber-950 text-center"
+            >
+              {wordSegments.map((s, idx) => {
+                const isActive =
+                  isPlaying &&
+                  highlightCharIdx >= s.start &&
+                  highlightCharIdx < s.end;
+                return (
+                  <Fragment key={idx}>
+                    <motion.span
+                      variants={prefersReduced ? undefined : inkWordVariants}
+                      className={isActive ? "kid-highlight" : undefined}
+                      // keep inline so text reflows naturally
+                      style={{ display: "inline" }}
+                    >
+                      {s.word}
+                    </motion.span>
+                    {s.ws}
+                  </Fragment>
+                );
+              })}
+            </motion.p>
+          </AnimatePresence>
         </div>
 
         {supported && (
