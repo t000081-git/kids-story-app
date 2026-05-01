@@ -8,12 +8,13 @@ import { checkRateLimit } from "@/lib/rate-limit";
 export const runtime = "edge";
 export const maxDuration = 30;
 
-// Free-only model chain — fastest models first so the common case is
-// quick. Both are 7-8 B parameter models; more than capable for a
-// short bedtime story and typically respond in 3-8 s on OpenRouter.
+// Free-only model chain — all three are raced in parallel via Promise.any().
+// The fastest non-rate-limited model wins. Having three increases reliability
+// because OpenRouter free models are often rate-limited upstream.
 const MODELS = [
-  "meta-llama/llama-3.1-8b-instruct:free",
-  "mistralai/mistral-7b-instruct:free",
+  "openai/gpt-oss-20b:free",
+  "openai/gpt-oss-120b:free",
+  "nvidia/nemotron-nano-9b-v2:free",
 ] as const;
 
 for (const m of MODELS) {
