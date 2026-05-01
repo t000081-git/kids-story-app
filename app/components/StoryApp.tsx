@@ -54,6 +54,13 @@ export type StoryRequest = {
 
 type Status = "idle" | "loading" | "error" | "done";
 
+/** Info carried from a saved story into the reader (for provenance badge). */
+export type LoadedSavedInfo = {
+  rating: number;
+  savedAt: number;
+  userAgent?: string;
+};
+
 declare global {
   interface Window {
     __ksMode?: "idle" | "story";
@@ -61,12 +68,13 @@ declare global {
 }
 
 export default function StoryApp() {
-  const [status, setStatus] = useState<Status>("idle");
-  const [story, setStory] = useState<Story | null>(null);
-  const [theme, setTheme] = useState<string>("animals");
+  const [status, setStatus]   = useState<Status>("idle");
+  const [story, setStory]     = useState<Story | null>(null);
+  const [theme, setTheme]     = useState<string>("animals");
   const [language, setLanguage] = useState<Language>("en");
-  const [error, setError] = useState<string>("");
-  const [savedStories, setSavedStories] = useState<SavedStory[]>([]);
+  const [error, setError]     = useState<string>("");
+  // Non-null when a saved story is being replayed (shows provenance badge).
+  const [loadedSavedInfo, setLoadedSavedInfo] = useState<LoadedSavedInfo | null>(null);
 
   // Dispatch a mode event so the ambient soundscape can lower its
   // volume during the storytelling phase.
@@ -77,9 +85,8 @@ export default function StoryApp() {
   }, [status, story]);
 
   // Load saved stories + handle incoming share links on mount.
+  // Also listen for star-click events from SavedStoryStars.
   useEffect(() => {
-    setSavedStories(listSavedStories());
-
     const shared = readSharedStoryFromHash();
     if (shared) {
       clearShareHash();
@@ -88,6 +95,13 @@ export default function StoryApp() {
       setLanguage(shared.language as Language);
       setStatus("done");
     }
+
+    function onLoadSaved(e: Event) {
+      const saved = (e as CustomEvent<SavedStory>).detail;
+      loadSavedStory(saved);
+    }
+    window.addEventListener("ks-load-saved", onLoadSaved);
+    return () => window.removeEventListener("ks-load-saved", onLoadSaved);
   }, []);
 
   async function generate(req: StoryRequest) {
@@ -95,6 +109,7 @@ export default function StoryApp() {
     setError("");
     setTheme(req.theme);
     setLanguage(req.language);
+    setLoadedSavedInfo(null);
 
     try {
       const res = await fetch("/api/generate-story", {
@@ -120,19 +135,30 @@ export default function StoryApp() {
     setStory(null);
     setStatus("idle");
     setError("");
+    setLoadedSavedInfo(null);
   }
 
-  function handleSaveStory(entry: Omit<SavedStory, "id" | "savedAt">) {
-    saveStory(entry);
-    setSavedStories(listSavedStories());
+  /** Save a story entry; returns the created SavedStory (includes generated id). */
+  function handleSaveStory(
+    entry: Omit<SavedStory, "id" | "savedAt">,
+  ): SavedStory {
+    const saved = saveStory(entry);
+    // Notify SavedStoryStars to refresh.
+    window.dispatchEvent(new CustomEvent("ks-stories-updated"));
+    return saved;
   }
 
-  function handleLoadSaved(saved: SavedStory) {
+  function loadSavedStory(saved: SavedStory) {
     setStory({ title: saved.title, pages: saved.pages });
     setTheme(saved.theme);
     setLanguage(saved.language as Language);
     setStatus("done");
     setError("");
+    setLoadedSavedInfo({
+      rating:    saved.rating,
+      savedAt:   saved.savedAt,
+      userAgent: saved.userAgent,
+    });
   }
 
   if (status === "done" && story) {
@@ -143,6 +169,7 @@ export default function StoryApp() {
         language={language}
         onWriteAnother={reset}
         onSave={handleSaveStory}
+        loadedSavedInfo={loadedSavedInfo}
       />
     );
   }
@@ -152,8 +179,6 @@ export default function StoryApp() {
       onSubmit={generate}
       isLoading={status === "loading"}
       error={error}
-      savedStories={savedStories}
-      onLoadSaved={handleLoadSaved}
     />
   );
 }

@@ -120,6 +120,80 @@ body {
     color 140ms ease-out;
 }
 
+/* ── Saved-story background stars ──────────────────────────────────────────
+   Local saves → gold 5-pointed star that twinkles.
+   Permanent-link saves → purple orb that pulses like a galaxy.        */
+
+/* 5-pointed star via clip-path */
+.ks-saved-star {
+  clip-path: polygon(
+    50% 0%, 61% 35%, 98% 35%, 68% 57%,
+    79% 91%, 50% 70%, 21% 91%, 32% 57%,
+    2%  35%, 39% 35%
+  );
+  background: linear-gradient(135deg, #ffe066 0%, #f59e0b 100%);
+  animation: ks-star-twinkle var(--anim-dur, 2.5s) ease-in-out infinite;
+  animation-delay: var(--anim-delay, 0s);
+}
+
+/* Galaxy orb */
+.ks-galaxy-star {
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 38% 38%,
+    rgba(210, 170, 255, 0.95) 0%,
+    rgba(120,  70, 230, 0.75) 55%,
+    rgba( 40,  18,  80, 0.30) 100%
+  );
+  box-shadow:
+    0 0  7px rgba(180, 130, 255, 0.80),
+    0 0 18px rgba(100,  60, 200, 0.40);
+  animation: ks-galaxy-pulse var(--anim-dur, 3s) ease-in-out infinite;
+  animation-delay: var(--anim-delay, 0s);
+}
+
+@keyframes ks-star-twinkle {
+  0%,  100% {
+    opacity: 0.60;
+    transform: scale(0.88) rotate(0deg);
+    filter: drop-shadow(0 0  3px rgba(255, 215, 0, 0.45));
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.22) rotate(18deg);
+    filter: drop-shadow(0 0 11px rgba(255, 215, 0, 0.95));
+  }
+}
+
+@keyframes ks-galaxy-pulse {
+  0%,  100% { opacity: 0.50; transform: scale(0.83); }
+  33%       { opacity: 0.95; transform: scale(1.12); }
+  66%       { opacity: 0.68; transform: scale(0.97); }
+}
+
+/* ── Rating stars (inside reading card) ────────────────────────────────────
+   Active stars sparkle; inactive stars are warm-dark for contrast on the
+   cream/amber card background.                                             */
+.ks-rating-star-active {
+  color: #f59e0b;
+  animation: ks-rating-sparkle 1.6s ease-in-out infinite;
+  animation-delay: var(--spark-delay, 0s);
+}
+.ks-rating-star-inactive {
+  color: rgba(120, 53, 15, 0.45); /* amber-900/45 — visible on cream */
+}
+
+@keyframes ks-rating-sparkle {
+  0%,  100% {
+    filter: drop-shadow(0 0  3px rgba(245, 158, 11, 0.50));
+    transform: scale(1.05);
+  }
+  50% {
+    filter: drop-shadow(0 0 10px rgba(245, 158, 11, 1.00));
+    transform: scale(1.20);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ks-twinkle,
   .ks-float,
@@ -128,7 +202,10 @@ body {
   .ks-glow,
   .ks-comet,
   .ks-pulse,
-  .ks-vscroll-inner {
+  .ks-vscroll-inner,
+  .ks-saved-star,
+  .ks-galaxy-star,
+  .ks-rating-star-active {
     animation: none !important;
     animation-name: none !important;
   }

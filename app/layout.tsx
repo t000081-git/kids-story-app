@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 // App identity — shown at ~33 % opacity so it's present but unobtrusive.
 // BUILD_TIME is evaluated at Next.js build time (static page), so it acts
 // as a deployment timestamp — change it to confirm a new deploy is live.
-const APP_VERSION = "v1.8";
+const APP_VERSION = "v1.9";
 const APP_CREATOR = "C.L.R.";
 // Kuwait Time = UTC+3, no DST
 const BUILD_TIME = (() => {

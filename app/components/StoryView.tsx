@@ -2,16 +2,12 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import type { Language, Story, Theme } from "./StoryApp";
+import type { Language, LoadedSavedInfo, Story, Theme } from "./StoryApp";
 import type { SavedStory, ShareableStory } from "@/lib/saved-stories";
-import { buildShareUrl } from "@/lib/saved-stories";
+import { buildShareUrl, updateSavedStory } from "@/lib/saved-stories";
+import { parseBrowser, parseOS } from "./SavedStoryStars";
 
 // ─── Magic Ink animation ─────────────────────────────────────────────────────
-// framer-motion v12 changed variant propagation from parent → child motion
-// elements, making staggerChildren unreliable through Fragments.
-// Every word carries its own explicit animation props.
-//
-// Container: only responsible for the collective exit fade.
 const inkContainerExit = {
   opacity: 0,
   transition: { duration: 0.18, ease: "easeIn" as const },
@@ -30,86 +26,69 @@ const LANG_BCP47: Record<Language, string> = {
 };
 
 function buildImageUrl(theme: string, pageText: string, seed: number): string {
-  const params = new URLSearchParams({
-    theme,
-    text: pageText,
-    seed: String(seed),
-  });
+  const params = new URLSearchParams({ theme, text: pageText, seed: String(seed) });
   return `/api/illustration?${params.toString()}`;
 }
 
 const THEME_EMOJI: Record<Theme, string[]> = {
-  animals: ["🦊", "🐰", "🦉", "🐢", "🦔", "🐿️"],
-  dinosaurs: ["🦕", "🦖", "🌋", "🌿", "🥚", "🦴"],
-  dragons: ["🐉", "🏰", "⚔️", "💎", "🛡️", "🗝️"],
-  magic: ["✨", "🪄", "🧚", "🦄", "🌟", "🔮"],
-  pirates: ["🏴‍☠️", "⛵", "💰", "🦜", "🗺️", "⚓"],
-  princesses: ["👸", "🏰", "👑", "💖", "🌹", "✨"],
-  knights: ["🛡️", "⚔️", "🏰", "🐎", "🏹", "🌟"],
-  mermaids: ["🧜‍♀️", "🐚", "🌊", "🐠", "💎", "🐬"],
-  unicorns: ["🦄", "🌈", "✨", "🌸", "🌟", "💖"],
-  fairies: ["🧚", "🌷", "🦋", "✨", "🌟", "🍄"],
-  wizards: ["🧙", "🪄", "📜", "🌟", "🔮", "🏰"],
-  robots: ["🤖", "⚙️", "🔧", "🚀", "💡", "🛠️"],
-  superheroes: ["🦸", "🦸‍♀️", "💥", "🌟", "🏙️", "🌈"],
-  space: ["🚀", "🌙", "⭐", "🪐", "🌟", "👽"],
-  "sea-life": ["🐠", "🐡", "🐙", "🐢", "🪸", "🐬"],
-  ninjas: ["🥷", "🌸", "🌿", "🌙", "⛩️", "🌟"],
-  "cars-trucks": ["🚗", "🚙", "🚛", "🏎️", "🛻", "🚐"],
-  trains: ["🚂", "🚆", "🛤️", "🌄", "🏞️", "🌲"],
-  "farm-animals": ["🐮", "🐷", "🐔", "🐑", "🦆", "🌾"],
-  "snowy-day": ["⛄", "❄️", "🛷", "☕", "🧤", "🌨️"],
+  animals:      ["🦊", "🐰", "🦉", "🐢", "🦔", "🐿️"],
+  dinosaurs:    ["🦕", "🦖", "🌋", "🌿", "🥚", "🦴"],
+  dragons:      ["🐉", "🏰", "⚔️", "💎", "🛡️", "🗝️"],
+  magic:        ["✨", "🪄", "🧚", "🦄", "🌟", "🔮"],
+  pirates:      ["🏴‍☠️", "⛵", "💰", "🦜", "🗺️", "⚓"],
+  princesses:   ["👸", "🏰", "👑", "💖", "🌹", "✨"],
+  knights:      ["🛡️", "⚔️", "🏰", "🐎", "🏹", "🌟"],
+  mermaids:     ["🧜‍♀️", "🐚", "🌊", "🐠", "💎", "🐬"],
+  unicorns:     ["🦄", "🌈", "✨", "🌸", "🌟", "💖"],
+  fairies:      ["🧚", "🌷", "🦋", "✨", "🌟", "🍄"],
+  wizards:      ["🧙", "🪄", "📜", "🌟", "🔮", "🏰"],
+  robots:       ["🤖", "⚙️", "🔧", "🚀", "💡", "🛠️"],
+  superheroes:  ["🦸", "🦸‍♀️", "💥", "🌟", "🏙️", "🌈"],
+  space:        ["🚀", "🌙", "⭐", "🪐", "🌟", "👽"],
+  "sea-life":   ["🐠", "🐡", "🐙", "🐢", "🪸", "🐬"],
+  ninjas:       ["🥷", "🌸", "🌿", "🌙", "⛩️", "🌟"],
+  "cars-trucks":["🚗", "🚙", "🚛", "🏎️", "🛻", "🚐"],
+  trains:       ["🚂", "🚆", "🛤️", "🌄", "🏞️", "🌲"],
+  "farm-animals":["🐮", "🐷", "🐔", "🐑", "🦆", "🌾"],
+  "snowy-day":  ["⛄", "❄️", "🛷", "☕", "🧤", "🌨️"],
 };
 
 const THEME_GRADIENT: Record<Theme, string> = {
-  animals: "from-emerald-200 via-amber-100 to-orange-200",
-  dinosaurs: "from-lime-200 via-amber-100 to-rose-200",
-  dragons: "from-rose-200 via-amber-100 to-violet-200",
-  magic: "from-fuchsia-200 via-amber-100 to-sky-200",
-  pirates: "from-blue-300 via-amber-100 to-orange-200",
-  princesses: "from-pink-200 via-rose-100 to-violet-200",
-  knights: "from-slate-300 via-amber-100 to-stone-300",
-  mermaids: "from-teal-200 via-cyan-100 to-blue-200",
-  unicorns: "from-pink-200 via-violet-100 to-sky-200",
-  fairies: "from-emerald-200 via-pink-100 to-violet-200",
-  wizards: "from-indigo-300 via-violet-200 to-amber-100",
-  robots: "from-sky-300 via-slate-100 to-emerald-200",
-  superheroes: "from-blue-300 via-amber-100 to-rose-200",
-  space: "from-indigo-300 via-purple-200 to-amber-100",
-  "sea-life": "from-cyan-200 via-blue-100 to-teal-200",
-  ninjas: "from-stone-300 via-pink-100 to-emerald-200",
+  animals:       "from-emerald-200 via-amber-100 to-orange-200",
+  dinosaurs:     "from-lime-200 via-amber-100 to-rose-200",
+  dragons:       "from-rose-200 via-amber-100 to-violet-200",
+  magic:         "from-fuchsia-200 via-amber-100 to-sky-200",
+  pirates:       "from-blue-300 via-amber-100 to-orange-200",
+  princesses:    "from-pink-200 via-rose-100 to-violet-200",
+  knights:       "from-slate-300 via-amber-100 to-stone-300",
+  mermaids:      "from-teal-200 via-cyan-100 to-blue-200",
+  unicorns:      "from-pink-200 via-violet-100 to-sky-200",
+  fairies:       "from-emerald-200 via-pink-100 to-violet-200",
+  wizards:       "from-indigo-300 via-violet-200 to-amber-100",
+  robots:        "from-sky-300 via-slate-100 to-emerald-200",
+  superheroes:   "from-blue-300 via-amber-100 to-rose-200",
+  space:         "from-indigo-300 via-purple-200 to-amber-100",
+  "sea-life":    "from-cyan-200 via-blue-100 to-teal-200",
+  ninjas:        "from-stone-300 via-pink-100 to-emerald-200",
   "cars-trucks": "from-orange-200 via-amber-100 to-yellow-200",
-  trains: "from-amber-200 via-emerald-100 to-stone-200",
-  "farm-animals": "from-amber-200 via-yellow-100 to-emerald-200",
-  "snowy-day": "from-sky-200 via-slate-100 to-blue-200",
+  trains:        "from-amber-200 via-emerald-100 to-stone-200",
+  "farm-animals":"from-amber-200 via-yellow-100 to-emerald-200",
+  "snowy-day":   "from-sky-200 via-slate-100 to-blue-200",
 };
 
-const FALLBACK_EMOJI = ["✨", "🌙", "⭐", "🌟", "🪄", "💫"];
+const FALLBACK_EMOJI    = ["✨", "🌙", "⭐", "🌟", "🪄", "💫"];
 const FALLBACK_GRADIENT = "from-violet-200 via-amber-100 to-fuchsia-200";
 
-function emojiFor(theme: string): string[] {
-  return THEME_EMOJI[theme as Theme] ?? FALLBACK_EMOJI;
-}
+function emojiFor(theme: string)    { return THEME_EMOJI[theme as Theme]    ?? FALLBACK_EMOJI; }
+function gradientFor(theme: string) { return THEME_GRADIENT[theme as Theme] ?? FALLBACK_GRADIENT; }
 
-function gradientFor(theme: string): string {
-  return THEME_GRADIENT[theme as Theme] ?? FALLBACK_GRADIENT;
-}
-
-function pickBestVoice(
-  voices: SpeechSynthesisVoice[],
-  language: Language,
-): SpeechSynthesisVoice | undefined {
-  const langPrefix = language.toLowerCase();
-  const matching = voices.filter((v) =>
-    v.lang.toLowerCase().startsWith(langPrefix),
-  );
-  if (matching.length === 0) {
-    return (
-      voices.find((v) => v.lang.toLowerCase().startsWith("en") && v.default) ??
-      voices.find((v) => v.lang.toLowerCase().startsWith("en"))
-    );
-  }
-  const tiers: RegExp[] = [
+function pickBestVoice(voices: SpeechSynthesisVoice[], language: Language) {
+  const lp = language.toLowerCase();
+  const matching = voices.filter((v) => v.lang.toLowerCase().startsWith(lp));
+  if (!matching.length)
+    return voices.find((v) => v.lang.toLowerCase().startsWith("en") && v.default)
+        ?? voices.find((v) => v.lang.toLowerCase().startsWith("en"));
+  const tiers = [
     /premium|enhanced|neural/i,
     /(google|microsoft).*/i,
     /samantha|ava|allison|karen|moira|tessa|fiona|nicky|serena|kyoko|otoya|yuna|mei-jia|tian-tian/i,
@@ -121,64 +100,54 @@ function pickBestVoice(
   return matching.find((v) => v.default) ?? matching[0];
 }
 
-// Split text into segments preserving whitespace, with character offsets
-// matching the original string. Used for karaoke-style word highlighting.
-function splitWords(
-  text: string,
-): { word: string; ws: string; start: number; end: number }[] {
+function splitWords(text: string) {
   const out: { word: string; ws: string; start: number; end: number }[] = [];
   const re = /(\S+)(\s*)/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    out.push({
-      word: m[1],
-      ws: m[2] ?? "",
-      start: m.index,
-      end: m.index + m[1].length,
-    });
-  }
+  while ((m = re.exec(text)) !== null)
+    out.push({ word: m[1], ws: m[2] ?? "", start: m.index, end: m.index + m[1].length });
   return out;
 }
 
+// ─── Component ───────────────────────────────────────────────────────────────
 export default function StoryView({
   story,
   theme,
   language,
   onWriteAnother,
   onSave,
+  loadedSavedInfo,
 }: {
   story: Story;
   theme: Theme | string;
   language: Language;
   onWriteAnother: () => void;
-  onSave?: (entry: Omit<SavedStory, "id" | "savedAt">) => void;
+  /** Returns the created SavedStory so we can store its id for share-linking. */
+  onSave?: (entry: Omit<SavedStory, "id" | "savedAt">) => SavedStory;
+  /** Non-null when reading a previously saved story (shows provenance badge). */
+  loadedSavedInfo?: LoadedSavedInfo | null;
 }) {
-  const [pageIdx, setPageIdx] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [supported, setSupported] = useState(true);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageError, setImageError] = useState(false);
-  const [highlightCharIdx, setHighlightCharIdx] = useState(-1);
+  const [pageIdx, setPageIdx]             = useState(0);
+  const [isPlaying, setIsPlaying]         = useState(false);
+  const [supported, setSupported]         = useState(true);
+  const [voices, setVoices]               = useState<SpeechSynthesisVoice[]>([]);
+  const [imageLoaded, setImageLoaded]     = useState(false);
+  const [imageError, setImageError]       = useState(false);
+  const [highlightCharIdx, setHighlight]  = useState(-1);
 
-  // Rating + save state
-  const [rating, setRating] = useState(0);
-  const [hoveredStar, setHoveredStar] = useState(0);
-  const [saved, setSaved] = useState(false);
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  // Rating + save
+  const [rating, setRating]               = useState(0);
+  const [hoveredStar, setHoveredStar]     = useState(0);
+  const [savedEntry, setSavedEntry]       = useState<SavedStory | null>(null);
+  const [copied, setCopied]               = useState(false);
+  const [isPermanent, setIsPermanent]     = useState(false);
 
-  // Respect the OS "reduce motion" accessibility setting.
   const prefersReduced = useReducedMotion();
 
-  const wordSegments = useMemo(
-    () => splitWords(story.pages[pageIdx]),
-    [story, pageIdx],
-  );
-
-  const total = story.pages.length;
+  const wordSegments = useMemo(() => splitWords(story.pages[pageIdx]), [story, pageIdx]);
+  const total  = story.pages.length;
   const isFirst = pageIdx === 0;
-  const isLast = pageIdx === total - 1;
+  const isLast  = pageIdx === total - 1;
 
   const imageUrls = useMemo(
     () => story.pages.map((text, i) => buildImageUrl(theme, text, i + 1)),
@@ -186,28 +155,19 @@ export default function StoryView({
   );
 
   useEffect(() => {
-    // Pre-warm all illustrations in parallel so navigation feels instant.
-    imageUrls.forEach((u) => {
-      const i = new Image();
-      i.src = u;
-    });
+    imageUrls.forEach((u) => { const img = new Image(); img.src = u; });
   }, [imageUrls]);
 
   useEffect(() => {
-    const ok =
-      typeof window !== "undefined" && "speechSynthesis" in window;
+    const ok = typeof window !== "undefined" && "speechSynthesis" in window;
     setSupported(ok);
     if (!ok) return;
-
-    function loadVoices() {
-      setVoices(window.speechSynthesis.getVoices());
-    }
-    loadVoices();
-    window.speechSynthesis.addEventListener?.("voiceschanged", loadVoices);
-
+    const load = () => setVoices(window.speechSynthesis.getVoices());
+    load();
+    window.speechSynthesis.addEventListener?.("voiceschanged", load);
     return () => {
       window.speechSynthesis?.cancel();
-      window.speechSynthesis?.removeEventListener?.("voiceschanged", loadVoices);
+      window.speechSynthesis?.removeEventListener?.("voiceschanged", load);
     };
   }, []);
 
@@ -216,69 +176,50 @@ export default function StoryView({
     setIsPlaying(false);
     setImageLoaded(false);
     setImageError(false);
-    setHighlightCharIdx(-1);
+    setHighlight(-1);
   }, [pageIdx]);
 
   function handleListen() {
     if (!supported) return;
-
     if (isPlaying) {
       window.speechSynthesis.cancel();
       setIsPlaying(false);
-      setHighlightCharIdx(-1);
+      setHighlight(-1);
       return;
     }
 
-    const utterance = new SpeechSynthesisUtterance(story.pages[pageIdx]);
-    utterance.rate = 0.95;
-    utterance.pitch = 1.0;
+    const utterance  = new SpeechSynthesisUtterance(story.pages[pageIdx]);
+    utterance.rate   = 0.95;
+    utterance.pitch  = 1.0;
     utterance.volume = 1.0;
-    utterance.lang = LANG_BCP47[language];
+    utterance.lang   = LANG_BCP47[language];
 
     const voice = pickBestVoice(voices, language);
-    if (voice) {
-      utterance.voice = voice;
-      utterance.lang = voice.lang || LANG_BCP47[language];
-    }
+    if (voice) { utterance.voice = voice; utterance.lang = voice.lang || LANG_BCP47[language]; }
 
-    // ── Karaoke highlight ────────────────────────────────────────────────────
-    // Unconditional 300 ms grace period after speak() — no reliance on
-    // utterance.onstart, which iOS Safari fires inconsistently.
     const pageText = story.pages[pageIdx];
     let boundaryFired = false;
     let fallbackId: ReturnType<typeof setInterval> | null = null;
 
     const gracePeriod = setTimeout(() => {
-      const startTime = Date.now();
+      const startTime  = Date.now();
       const charsPerMs = (13 * utterance.rate) / 1000;
       fallbackId = setInterval(() => {
-        if (boundaryFired) {
-          clearInterval(fallbackId!);
-          fallbackId = null;
-          return;
-        }
-        const pos = Math.min(
-          Math.floor((Date.now() - startTime) * charsPerMs),
-          pageText.length - 1,
-        );
-        setHighlightCharIdx(pos);
+        if (boundaryFired) { clearInterval(fallbackId!); fallbackId = null; return; }
+        setHighlight(Math.min(Math.floor((Date.now() - startTime) * charsPerMs), pageText.length - 1));
       }, 80);
     }, 300);
 
-    utterance.onboundary = (event: SpeechSynthesisEvent) => {
-      if (event.name === "word" || event.name === "sentence") {
-        boundaryFired = true;
-        setHighlightCharIdx(event.charIndex);
-      }
+    utterance.onboundary = (e: SpeechSynthesisEvent) => {
+      if (e.name === "word" || e.name === "sentence") { boundaryFired = true; setHighlight(e.charIndex); }
     };
-
     function cleanup() {
       clearTimeout(gracePeriod);
       if (fallbackId) clearInterval(fallbackId);
       setIsPlaying(false);
-      setHighlightCharIdx(-1);
+      setHighlight(-1);
     }
-    utterance.onend = cleanup;
+    utterance.onend   = cleanup;
     utterance.onerror = cleanup;
 
     window.speechSynthesis.speak(utterance);
@@ -287,19 +228,27 @@ export default function StoryView({
 
   function handleSave() {
     if (!onSave || rating === 0) return;
-    onSave({ title: story.title, pages: story.pages, theme, language, rating });
-    setSaved(true);
-  }
-
-  function handleShare() {
-    const shareable: ShareableStory = {
-      title: story.title,
-      pages: story.pages,
+    const entry = onSave({
+      title:     story.title,
+      pages:     story.pages,
       theme,
       language,
+      rating,
+      userAgent: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+    });
+    setSavedEntry(entry);
+  }
+
+  function handleGetPermanentLink() {
+    if (!savedEntry) return;
+    const shareable: ShareableStory = {
+      title: story.title, pages: story.pages, theme, language,
     };
     const url = buildShareUrl(shareable);
-    setShareUrl(url);
+    // Mark this saved story as having a permanent link
+    updateSavedStory(savedEntry.id, { shareUrl: url });
+    window.dispatchEvent(new CustomEvent("ks-stories-updated"));
+    setIsPermanent(true);
     navigator.clipboard?.writeText(url).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
@@ -307,16 +256,46 @@ export default function StoryView({
   }
 
   return (
-    // Root: flex column capped to the viewport so nothing ever pushes off-screen.
     <div
       className="w-full max-w-2xl flex flex-col gap-2"
       style={{ maxHeight: "calc(100dvh - 1.5rem)" }}
     >
       {/* ── Story card ────────────────────────────────────────────────────── */}
-      <div className="flex-1 min-h-0 rounded-2xl border-2 border-amber-900/15 bg-amber-50/80 p-3 sm:p-5 shadow-lg shadow-amber-900/10 flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 relative rounded-2xl border-2 border-amber-900/15 bg-amber-50/80 p-3 sm:p-5 shadow-lg shadow-amber-900/10 flex flex-col overflow-hidden">
+
+        {/* Provenance badge — 33 % opacity, top-right corner of card */}
+        {loadedSavedInfo && (
+          <div
+            className="absolute top-2 right-2.5 text-right pointer-events-none select-none font-mono"
+            style={{ opacity: 0.33 }}
+            aria-hidden="true"
+          >
+            <div className="text-[11px] text-amber-900 leading-tight tracking-wider">
+              {"★".repeat(loadedSavedInfo.rating)}
+              <span className="text-amber-900/40">{"★".repeat(5 - loadedSavedInfo.rating)}</span>
+            </div>
+            <div className="text-[9px] text-amber-900/80">
+              {new Date(loadedSavedInfo.savedAt).toLocaleDateString()}
+            </div>
+            {loadedSavedInfo.userAgent && (
+              <div className="text-[8px] text-amber-900/70 max-w-[100px] truncate">
+                {parseBrowser(loadedSavedInfo.userAgent)} · {parseOS(loadedSavedInfo.userAgent)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ← New story (top-left, every page) */}
+        <button
+          onClick={onWriteAnother}
+          className="absolute top-2 left-2.5 text-[11px] text-amber-800/50 hover:text-amber-800 transition-colors rounded-full px-2 py-0.5 hover:bg-amber-900/8 leading-tight"
+          aria-label="Back to main screen"
+        >
+          ✕ New story
+        </button>
 
         {/* Title */}
-        <h1 className="flex-shrink-0 text-xl sm:text-3xl md:text-4xl text-amber-900 mb-0.5 sm:mb-1 text-center tracking-tight">
+        <h1 className="flex-shrink-0 text-xl sm:text-3xl md:text-4xl text-amber-900 mt-3 mb-0.5 sm:mb-1 text-center tracking-tight">
           {story.title}
         </h1>
 
@@ -325,23 +304,17 @@ export default function StoryView({
           Page {pageIdx + 1} of {total}
         </p>
 
-        {/* Illustration ─ fixed height cap so it never crowds the text */}
+        {/* Illustration */}
         <div
           className="flex-shrink-0 relative w-full overflow-hidden rounded-xl border-2 border-amber-900/15 mb-2 sm:mb-3 aspect-[5/3]"
           style={{ maxHeight: "min(38vh, 260px)" }}
         >
           {imageError ? (
-            <div
-              className={`h-full w-full bg-gradient-to-br ${gradientFor(theme)} flex items-center justify-center`}
-            >
+            <div className={`h-full w-full bg-gradient-to-br ${gradientFor(theme)} flex items-center justify-center`}>
               <div className="flex gap-2 text-5xl sm:text-6xl drop-shadow-sm">
                 {(() => {
                   const e = emojiFor(theme);
-                  return [
-                    e[pageIdx % e.length],
-                    e[(pageIdx + 1) % e.length],
-                    e[(pageIdx + 2) % e.length],
-                  ].join(" ");
+                  return [e[pageIdx % e.length], e[(pageIdx + 1) % e.length], e[(pageIdx + 2) % e.length]].join(" ");
                 })()}
               </div>
             </div>
@@ -357,60 +330,37 @@ export default function StoryView({
                 key={imageUrls[pageIdx]}
                 src={imageUrls[pageIdx]}
                 alt={`Illustration for page ${pageIdx + 1}`}
-                className={
-                  "h-full w-full object-cover transition-opacity duration-500 " +
-                  (imageLoaded ? "opacity-100" : "opacity-0")
-                }
+                className={"h-full w-full object-cover transition-opacity duration-500 " + (imageLoaded ? "opacity-100" : "opacity-0")}
                 onLoad={() => setImageLoaded(true)}
-                onError={() => {
-                  setImageError(true);
-                  setImageLoaded(true);
-                }}
+                onError={() => { setImageError(true); setImageLoaded(true); }}
               />
             </>
           )}
         </div>
 
-        {/* Story text — flex-1 so it fills whatever space remains.
-            overflow-hidden prevents clipping from scrolling; py-2 gives
-            a 8 px buffer so the Magic Ink words' initial y:12 offset
-            doesn't clip at the container edges. */}
+        {/* Story text — Magic Ink bloom */}
         <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden py-2">
           <AnimatePresence mode="wait">
             <motion.p
               key={pageIdx}
               initial={{ opacity: 1 }}
               animate={{ opacity: 1 }}
-              exit={
-                prefersReduced
-                  ? { opacity: 0, transition: { duration: 0.15 } }
-                  : inkContainerExit
-              }
+              exit={prefersReduced
+                ? { opacity: 0, transition: { duration: 0.15 } }
+                : inkContainerExit}
               className="text-sm sm:text-xl md:text-2xl leading-relaxed text-amber-950 text-center"
             >
               {wordSegments.map((s, idx) => {
-                const isActive =
-                  isPlaying &&
-                  highlightCharIdx >= s.start &&
-                  highlightCharIdx < s.end;
+                const isActive = isPlaying && highlightCharIdx >= s.start && highlightCharIdx < s.end;
                 return (
                   <Fragment key={idx}>
                     <motion.span
-                      // Explicit props — no variant inheritance from parent.
                       initial={prefersReduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
                       animate={prefersReduced ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                      transition={
-                        prefersReduced
-                          ? { duration: 0.15 }
-                          : {
-                              duration: 0.45,
-                              delay: idx * 0.03,
-                              ease: [0.16, 1, 0.3, 1],
-                            }
-                      }
+                      transition={prefersReduced ? { duration: 0.15 } : {
+                        duration: 0.45, delay: idx * 0.03, ease: [0.16, 1, 0.3, 1],
+                      }}
                       className={isActive ? "kid-highlight" : undefined}
-                      // inline-block so CSS transforms (y offset) apply in
-                      // Safari/iOS — plain "inline" silently drops transforms
                       style={{ display: "inline-block" }}
                     >
                       {s.word}
@@ -423,46 +373,79 @@ export default function StoryView({
           </AnimatePresence>
         </div>
 
-        {/* Rating section — only shows on the last page */}
+        {/* ── Rating + save (last page only) ── */}
         {isLast && (
-          <div className="flex-shrink-0 pt-1.5 sm:pt-2 border-t border-amber-900/10 flex flex-col items-center gap-1">
-            {!saved ? (
+          <div className="flex-shrink-0 mt-1 border-t border-amber-900/10 bg-amber-950/12 rounded-xl mx-[-0.25rem] px-3 pt-2 pb-1.5 flex flex-col items-center gap-1">
+            {!savedEntry ? (
+              /* Not yet saved — show stars */
               <>
-                <p className="text-xs text-amber-700/75 italic">
-                  Did you enjoy this story?
-                </p>
-                <div className="flex gap-0.5 sm:gap-1">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      onClick={() => setRating(star)}
-                      onMouseEnter={() => setHoveredStar(star)}
-                      onMouseLeave={() => setHoveredStar(0)}
-                      className="text-xl sm:text-2xl transition-transform hover:scale-110 active:scale-95 leading-none select-none px-0.5"
-                      aria-label={`${star} star${star > 1 ? "s" : ""}`}
-                    >
-                      {star <= (hoveredStar || rating) ? "⭐" : "☆"}
-                    </button>
-                  ))}
+                <p className="text-xs text-amber-700 italic">Did you enjoy this story?</p>
+                <div className="flex gap-0.5">
+                  {[1, 2, 3, 4, 5].map((star) => {
+                    const active = star <= (hoveredStar || rating);
+                    return (
+                      <button
+                        key={star}
+                        onClick={() => setRating(star)}
+                        onMouseEnter={() => setHoveredStar(star)}
+                        onMouseLeave={() => setHoveredStar(0)}
+                        className={`text-2xl sm:text-3xl leading-none px-0.5 transition-all select-none
+                                    ${active ? "ks-rating-star-active" : "ks-rating-star-inactive"}`}
+                        style={active ? ({ "--spark-delay": `${(star - 1) * 0.1}s` } as React.CSSProperties) : {}}
+                        aria-label={`${star} star${star > 1 ? "s" : ""}`}
+                      >
+                        ★
+                      </button>
+                    );
+                  })}
                 </div>
                 {rating > 0 && (
                   <button
                     onClick={handleSave}
-                    className="text-xs rounded-full border border-amber-700/35 px-3 py-0.5 text-amber-800 hover:bg-amber-100/50 transition-colors"
+                    className="text-xs rounded-full border border-amber-700/40 px-3 py-0.5 text-amber-800 hover:bg-amber-100/60 transition-colors"
                   >
                     💾 Save this story
                   </button>
                 )}
               </>
             ) : (
-              <div className="flex items-center gap-2">
-                <p className="text-xs text-amber-700 italic">✨ Saved!</p>
-                <button
-                  onClick={handleShare}
-                  className="text-xs rounded-full border border-amber-700/35 px-3 py-0.5 text-amber-800 hover:bg-amber-100/50 transition-colors"
-                >
-                  {copied ? "✓ Link copied!" : "🔗 Share link"}
-                </button>
+              /* Saved — show share options */
+              <div className="flex flex-col items-center gap-1 w-full">
+                <p className="text-xs text-amber-700 italic">
+                  ✨ Saved! {"★".repeat(savedEntry.rating)}
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {/* Share (URL hash — quick copy) */}
+                  <button
+                    onClick={() => {
+                      const url = buildShareUrl({ title: story.title, pages: story.pages, theme, language });
+                      navigator.clipboard?.writeText(url).then(() => {
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2500);
+                      });
+                    }}
+                    className="text-xs rounded-full border border-amber-700/40 px-3 py-0.5 text-amber-800 hover:bg-amber-100/60 transition-colors"
+                  >
+                    {copied && !isPermanent ? "✓ Copied!" : "🔗 Share"}
+                  </button>
+                  {/* Permanent link — saves shareUrl to localStorage → becomes galaxy star */}
+                  <button
+                    onClick={handleGetPermanentLink}
+                    className={`text-xs rounded-full border px-3 py-0.5 transition-colors
+                                ${isPermanent
+                                  ? "border-violet-400/50 text-violet-700 bg-violet-100/40"
+                                  : "border-amber-700/40 text-amber-800 hover:bg-amber-100/60"}`}
+                  >
+                    {isPermanent
+                      ? (copied ? "✓ Copied!" : "🌌 Permanent link ✓")
+                      : "🌌 Get permanent link"}
+                  </button>
+                </div>
+                <p className="text-[10px] text-amber-700/60 italic">
+                  {isPermanent
+                    ? "Story saved as a galaxy star ✦ anyone with the link can read it"
+                    : "Permanent link works on any device, forever"}
+                </p>
               </div>
             )}
           </div>
@@ -481,7 +464,7 @@ export default function StoryView({
         )}
       </div>
 
-      {/* ── Navigation — outside the card, always at the same position ───── */}
+      {/* ── Navigation — always at the same position ─────────────────────── */}
       <div className="flex-shrink-0 flex items-center justify-between gap-2">
         <button
           onClick={() => setPageIdx((i) => Math.max(0, i - 1))}

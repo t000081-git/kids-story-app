@@ -8,6 +8,10 @@ export type SavedStory = {
   language: Language;
   rating: number;
   savedAt: number;
+  /** Set once the user generates a permanent share link for this story. */
+  shareUrl?: string;
+  /** User-agent string captured at save time for provenance display. */
+  userAgent?: string;
 };
 
 export type ShareableStory = {
@@ -58,6 +62,19 @@ export function saveStory(
   if (list.length > MAX_SAVED) list.length = MAX_SAVED;
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
   return saved;
+}
+
+/** Update specific fields of a saved story in-place (e.g. to add shareUrl). */
+export function updateSavedStory(
+  id: string,
+  updates: Partial<Omit<SavedStory, "id">>,
+): void {
+  if (typeof window === "undefined") return;
+  const list = listSavedStories();
+  const idx = list.findIndex((s) => s.id === id);
+  if (idx < 0) return;
+  list[idx] = { ...list[idx], ...updates };
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
 }
 
 export function deleteSavedStory(id: string): void {
