@@ -1,32 +1,8 @@
 "use client";
 
-const STARS: { left: string; top: string; size: number; delay: string; duration: string; char: string }[] = [
-  { left: "8%",  top: "12%", size: 14, delay: "0s",   duration: "3.2s", char: "✦" },
-  { left: "22%", top: "6%",  size: 10, delay: "0.6s", duration: "4.1s", char: "✧" },
-  { left: "38%", top: "18%", size: 8,  delay: "1.4s", duration: "2.8s", char: "·" },
-  { left: "55%", top: "9%",  size: 12, delay: "0.2s", duration: "3.6s", char: "✦" },
-  { left: "70%", top: "16%", size: 9,  delay: "1.0s", duration: "3.0s", char: "⋆" },
-  { left: "86%", top: "22%", size: 11, delay: "2.0s", duration: "4.4s", char: "✧" },
-  { left: "14%", top: "32%", size: 8,  delay: "1.7s", duration: "3.4s", char: "·" },
-  { left: "62%", top: "30%", size: 10, delay: "0.8s", duration: "3.8s", char: "⋆" },
-  { left: "82%", top: "44%", size: 9,  delay: "2.4s", duration: "4.0s", char: "✦" },
-  { left: "5%",  top: "58%", size: 8,  delay: "0.4s", duration: "3.3s", char: "·" },
-  { left: "92%", top: "68%", size: 10, delay: "1.2s", duration: "3.7s", char: "✧" },
-  { left: "30%", top: "78%", size: 9,  delay: "2.2s", duration: "4.2s", char: "⋆" },
-  // extra stars
-  { left: "3%",  top: "26%", size: 7,  delay: "0.9s", duration: "3.1s", char: "·" },
-  { left: "46%", top: "4%",  size: 6,  delay: "1.5s", duration: "2.6s", char: "·" },
-  { left: "75%", top: "5%",  size: 9,  delay: "0.3s", duration: "3.5s", char: "✧" },
-  { left: "18%", top: "46%", size: 11, delay: "1.9s", duration: "4.3s", char: "✦" },
-  { left: "48%", top: "40%", size: 7,  delay: "0.7s", duration: "3.0s", char: "·" },
-  { left: "72%", top: "56%", size: 12, delay: "2.6s", duration: "4.6s", char: "✦" },
-  { left: "26%", top: "62%", size: 8,  delay: "1.1s", duration: "3.4s", char: "⋆" },
-  { left: "44%", top: "70%", size: 9,  delay: "0.5s", duration: "3.7s", char: "✧" },
-  { left: "58%", top: "84%", size: 10, delay: "1.6s", duration: "4.0s", char: "✦" },
-  { left: "10%", top: "88%", size: 8,  delay: "2.3s", duration: "3.5s", char: "⋆" },
-  { left: "78%", top: "82%", size: 9,  delay: "0.1s", duration: "3.2s", char: "·" },
-  { left: "94%", top: "52%", size: 7,  delay: "1.3s", duration: "2.9s", char: "·" },
-];
+// Note: static twinkling STARS are intentionally removed — saved-story gold
+// stars and purple galaxy orbs (SavedStoryStars) fill that role and grow
+// organically as users save stories.
 
 const CLOUDS: { top: string; duration: string; delay: string; size: number; opacity: number }[] = [
   { top: "14%", duration: "55s", delay: "0s",   size: 60, opacity: 0.55 },
@@ -86,22 +62,6 @@ export default function NightSky() {
             mixBlendMode: "screen",
           }}
         />
-      ))}
-
-      {/* Stars */}
-      {STARS.map((s, i) => (
-        <span
-          key={`s${i}`}
-          className="ks-twinkle absolute text-amber-100 select-none"
-          style={{
-            left: s.left,
-            top: s.top,
-            fontSize: `${s.size}px`,
-            animation: `ks-twinkle ${s.duration} ease-in-out ${s.delay} infinite`,
-          }}
-        >
-          {s.char}
-        </span>
       ))}
 
       {/* Moon */}
