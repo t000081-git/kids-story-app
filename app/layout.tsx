@@ -24,10 +24,11 @@ export const metadata: Metadata = {
 // as a deployment timestamp — change it to confirm a new deploy is live.
 const APP_VERSION = "v1.6";
 const APP_CREATOR = "C.L.R.";
-const BUILD_TIME = new Date()
-  .toISOString()
-  .replace("T", " ")
-  .slice(0, 16) + " UTC";
+// Kuwait Time = UTC+3, no DST
+const BUILD_TIME = (() => {
+  const kw = new Date(Date.now() + 3 * 60 * 60 * 1000);
+  return kw.toISOString().replace(/[-:T]/g, "").slice(0, 14) + " KWT";
+})();
 
 export default function RootLayout({
   children,
