@@ -1,5 +1,5 @@
 const WINDOW_MS = 60 * 60 * 1000;
-const MAX_REQUESTS = 5;
+const MAX_REQUESTS = 25; // 25 per hour — generous for personal/family use
 
 const buckets = new Map<string, { count: number; resetAt: number }>();
 
