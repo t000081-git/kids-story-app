@@ -348,8 +348,9 @@ export default function StoryView({
                     <motion.span
                       variants={prefersReduced ? undefined : inkWordVariants}
                       className={isActive ? "kid-highlight" : undefined}
-                      // keep inline so text reflows naturally
-                      style={{ display: "inline" }}
+                      // inline-block so CSS transforms (y offset) apply in
+                      // Safari/iOS — plain "inline" silently drops transforms
+                      style={{ display: "inline-block" }}
                     >
                       {s.word}
                     </motion.span>
