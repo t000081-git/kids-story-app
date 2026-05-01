@@ -19,6 +19,10 @@ export const metadata: Metadata = {
     "Tell us your name, pick a theme, and we'll write a personalized bedtime story.",
 };
 
+// App identity — shown at ~33 % opacity so it's present but unobtrusive.
+const APP_VERSION = "v1.5";
+const APP_CREATOR = "C.L.R.";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -29,7 +33,21 @@ export default function RootLayout({
       lang="en"
       className={`${lora.variable} ${fredoka.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        {/* Creator watermark — fixed upper-left, readable on close inspection */}
+        <div
+          aria-hidden="true"
+          style={{ opacity: 0.33 }}
+          className="fixed top-2 left-3 z-50 select-none pointer-events-none
+                     text-[10px] leading-tight tracking-widest text-amber-200/80
+                     font-mono"
+        >
+          {APP_CREATOR}
+          <br />
+          <span className="text-[9px] tracking-wider">{APP_VERSION}</span>
+        </div>
+      </body>
     </html>
   );
 }
