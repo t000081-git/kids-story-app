@@ -21,19 +21,21 @@ const inkContainerVariants = {
   },
 };
 
-// Each word: fades in, rises 7 px, and un-blurs — like ink soaking into paper.
+// Each word: fades in and rises 12 px — like ink soaking into paper.
+// Blur was removed: animating filter:blur on dozens of inline-block spans
+// forces a separate GPU compositing layer per word and is silently dropped
+// by mobile Safari. opacity + translateY is equally evocative and runs
+// at full 60 fps on every device.
 const inkWordVariants = {
   hidden: {
     opacity: 0,
-    y: 7,
-    filter: "blur(4px)",
+    y: 12,
   },
   visible: {
     opacity: 1,
     y: 0,
-    filter: "blur(0px)",
     transition: {
-      duration: 0.5,
+      duration: 0.45,
       ease: [0.16, 1, 0.3, 1] as const, // fast rise, gentle settle
     },
   },
@@ -255,43 +257,44 @@ export default function StoryView({
     }
 
     // ── Karaoke highlight ────────────────────────────────────────────────────
-    // Desktop Chrome/Firefox fire onboundary word events natively.
-    // iOS Safari runs the speech but never fires onboundary, so we detect
-    // that silence within the first 600 ms and fall back to a time-based
-    // character estimator (~13 chars/s at rate 1.0, scaled by utterance.rate).
+    // Strategy: start the time-based fallback immediately when speak() is
+    // called (after a 150 ms grace period for speech to actually begin).
+    // If the browser fires native onboundary events (Chrome / Firefox desktop),
+    // the fallback self-cancels and native events take over.
+    // This avoids relying on utterance.onstart, which iOS Safari fires
+    // inconsistently — meaning the old "wait for onstart then check" approach
+    // would silently never start the fallback on iPhone/iPad.
     const pageText = story.pages[pageIdx];
     let boundaryFired = false;
     let fallbackId: ReturnType<typeof setInterval> | null = null;
-    let checkTimer: ReturnType<typeof setTimeout> | null = null;
 
-    utterance.onstart = () => {
-      checkTimer = setTimeout(() => {
-        if (boundaryFired) return; // native events are working — do nothing
-        // iOS Safari fallback: estimate position from elapsed time
-        const startTime = Date.now();
-        const charsPerMs = (13 * utterance.rate) / 1000;
-        fallbackId = setInterval(() => {
-          const pos = Math.min(
-            Math.floor((Date.now() - startTime) * charsPerMs),
-            pageText.length - 1,
-          );
-          setHighlightCharIdx(pos);
-        }, 80);
-      }, 600);
-    };
+    const gracePeriod = setTimeout(() => {
+      const startTime = Date.now();
+      const charsPerMs = (13 * utterance.rate) / 1000;
+      fallbackId = setInterval(() => {
+        if (boundaryFired) {
+          // Native events are working — hand off and stop polling
+          clearInterval(fallbackId!);
+          fallbackId = null;
+          return;
+        }
+        const pos = Math.min(
+          Math.floor((Date.now() - startTime) * charsPerMs),
+          pageText.length - 1,
+        );
+        setHighlightCharIdx(pos);
+      }, 80);
+    }, 150);
 
     utterance.onboundary = (event: SpeechSynthesisEvent) => {
       if (event.name === "word" || event.name === "sentence") {
-        if (!boundaryFired) {
-          boundaryFired = true;
-          if (checkTimer) clearTimeout(checkTimer); // cancel fallback check
-        }
+        boundaryFired = true; // signals the fallback interval to stop
         setHighlightCharIdx(event.charIndex);
       }
     };
 
     function cleanup() {
-      if (checkTimer) clearTimeout(checkTimer);
+      clearTimeout(gracePeriod);
       if (fallbackId) clearInterval(fallbackId);
       setIsPlaying(false);
       setHighlightCharIdx(-1);
