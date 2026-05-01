@@ -2,12 +2,18 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { checkRateLimit } from "@/lib/rate-limit";
 
-// Free-only model chain. We try the primary, then the fallback, with
-// up to two attempts each so a single flaky response doesn't surface
-// to the user as "no story came back".
+// Use Edge runtime so Vercel Hobby allows up to 30 s instead of the
+// default 10 s serverless limit. Story generation on free-tier LLMs
+// routinely takes 8-20 s — Edge is the only way to stay within Hobby.
+export const runtime = "edge";
+export const maxDuration = 30;
+
+// Free-only model chain — fastest models first so the common case is
+// quick. Both are 7-8 B parameter models; more than capable for a
+// short bedtime story and typically respond in 3-8 s on OpenRouter.
 const MODELS = [
-  "openai/gpt-oss-120b:free",
-  "meta-llama/llama-3.3-70b-instruct:free",
+  "meta-llama/llama-3.1-8b-instruct:free",
+  "mistralai/mistral-7b-instruct:free",
 ] as const;
 
 for (const m of MODELS) {
@@ -143,6 +149,10 @@ The "pages" array MUST contain exactly ${pageCount} string entries.`;
 
 type GeneratedStory = { title: string; pages: string[] };
 
+// Each model attempt gets 13 s. Two models × 13 s = 26 s worst-case,
+// comfortably inside the 30 s Edge limit with room for overhead.
+const FETCH_TIMEOUT_MS = 13_000;
+
 async function tryGenerate(
   apiKey: string,
   model: string,
@@ -150,27 +160,36 @@ async function tryGenerate(
   userPrompt: string,
   pageCount: number,
 ): Promise<GeneratedStory> {
-  const upstream = await fetch(
-    "https://openrouter.ai/api/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://kids-story-app-green.vercel.app",
-        "X-Title": "Kids Story",
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  let upstream: Response;
+  try {
+    upstream = await fetch(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        signal: controller.signal,
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://kids-story-app-green.vercel.app",
+          "X-Title": "Kids Story",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          response_format: { type: "json_object" },
+          max_tokens: 3000,
+        }),
       },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: { type: "json_object" },
-        max_tokens: 3000,
-      }),
-    },
-  );
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!upstream.ok) {
     const errText = await upstream.text().catch(() => "");
@@ -287,27 +306,25 @@ export async function POST(req: Request) {
   const systemPrompt = buildSystemPrompt(pageCount, language);
   const userPrompt = `Write a ${pageCount}-page bedtime story for a child named ${rawName}. The theme is: ${themePhrase}. Write the entire story in ${LANGUAGE_NAME[language]}.`;
 
-  // Try each model up to twice. A single flaky response no longer
-  // surfaces as a user-facing error.
+  // One attempt per model — fail fast so we use as little of the 30 s
+  // Edge budget as possible on a slow or unavailable model.
   let lastError: unknown = null;
   for (const model of MODELS) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const story = await tryGenerate(
-          apiKey,
-          model,
-          systemPrompt,
-          userPrompt,
-          pageCount,
-        );
-        return NextResponse.json(story);
-      } catch (e) {
-        lastError = e;
-        console.error(
-          `Story generation failed (model=${model}, attempt=${attempt + 1}):`,
-          e instanceof Error ? e.message : e,
-        );
-      }
+    try {
+      const story = await tryGenerate(
+        apiKey,
+        model,
+        systemPrompt,
+        userPrompt,
+        pageCount,
+      );
+      return NextResponse.json(story);
+    } catch (e) {
+      lastError = e;
+      console.error(
+        `Story generation failed (model=${model}):`,
+        e instanceof Error ? e.message : e,
+      );
     }
   }
 
