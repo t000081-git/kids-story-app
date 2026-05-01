@@ -263,22 +263,23 @@ export default function StoryView({
       {/* ── Story card ────────────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 relative rounded-2xl border-2 border-amber-900/15 bg-amber-50/80 p-3 sm:p-5 shadow-lg shadow-amber-900/10 flex flex-col overflow-hidden">
 
-        {/* Provenance badge — 33 % opacity, top-right corner of card */}
+        {/* Provenance badge — top-right corner of card, clearly visible */}
         {loadedSavedInfo && (
           <div
-            className="absolute top-2 right-2.5 text-right pointer-events-none select-none font-mono"
-            style={{ opacity: 0.33 }}
+            className="absolute top-2 right-2.5 text-right pointer-events-none select-none
+                       bg-amber-900/10 rounded-lg px-2 py-1 backdrop-blur-sm
+                       border border-amber-900/10"
             aria-hidden="true"
           >
-            <div className="text-[11px] text-amber-900 leading-tight tracking-wider">
+            <div className="text-[13px] text-amber-700 leading-tight tracking-wider font-medium">
               {"★".repeat(loadedSavedInfo.rating)}
-              <span className="text-amber-900/40">{"★".repeat(5 - loadedSavedInfo.rating)}</span>
+              <span className="text-amber-900/25">{"★".repeat(5 - loadedSavedInfo.rating)}</span>
             </div>
-            <div className="text-[9px] text-amber-900/80">
+            <div className="text-[10px] text-amber-800/90 font-mono mt-0.5">
               {new Date(loadedSavedInfo.savedAt).toLocaleDateString()}
             </div>
             {loadedSavedInfo.userAgent && (
-              <div className="text-[8px] text-amber-900/70 max-w-[100px] truncate">
+              <div className="text-[9px] text-amber-700/75 font-mono max-w-[110px] truncate mt-0.5">
                 {parseBrowser(loadedSavedInfo.userAgent)} · {parseOS(loadedSavedInfo.userAgent)}
               </div>
             )}
