@@ -254,22 +254,50 @@ export default function StoryView({
       utterance.lang = voice.lang || LANG_BCP47[language];
     }
 
-    // Karaoke-style word boundary tracking. Most browsers fire
-    // word-level boundary events; if not, the audio still plays and
-    // we just don't highlight (graceful degradation).
+    // ── Karaoke highlight ────────────────────────────────────────────────────
+    // Desktop Chrome/Firefox fire onboundary word events natively.
+    // iOS Safari runs the speech but never fires onboundary, so we detect
+    // that silence within the first 600 ms and fall back to a time-based
+    // character estimator (~13 chars/s at rate 1.0, scaled by utterance.rate).
+    const pageText = story.pages[pageIdx];
+    let boundaryFired = false;
+    let fallbackId: ReturnType<typeof setInterval> | null = null;
+    let checkTimer: ReturnType<typeof setTimeout> | null = null;
+
+    utterance.onstart = () => {
+      checkTimer = setTimeout(() => {
+        if (boundaryFired) return; // native events are working — do nothing
+        // iOS Safari fallback: estimate position from elapsed time
+        const startTime = Date.now();
+        const charsPerMs = (13 * utterance.rate) / 1000;
+        fallbackId = setInterval(() => {
+          const pos = Math.min(
+            Math.floor((Date.now() - startTime) * charsPerMs),
+            pageText.length - 1,
+          );
+          setHighlightCharIdx(pos);
+        }, 80);
+      }, 600);
+    };
+
     utterance.onboundary = (event: SpeechSynthesisEvent) => {
       if (event.name === "word" || event.name === "sentence") {
+        if (!boundaryFired) {
+          boundaryFired = true;
+          if (checkTimer) clearTimeout(checkTimer); // cancel fallback check
+        }
         setHighlightCharIdx(event.charIndex);
       }
     };
-    utterance.onend = () => {
+
+    function cleanup() {
+      if (checkTimer) clearTimeout(checkTimer);
+      if (fallbackId) clearInterval(fallbackId);
       setIsPlaying(false);
       setHighlightCharIdx(-1);
-    };
-    utterance.onerror = () => {
-      setIsPlaying(false);
-      setHighlightCharIdx(-1);
-    };
+    }
+    utterance.onend = cleanup;
+    utterance.onerror = cleanup;
 
     window.speechSynthesis.speak(utterance);
     setIsPlaying(true);
