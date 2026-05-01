@@ -1,50 +1,38 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import type { Language, Length, StoryRequest, Theme } from "./StoryApp";
-
-const LANGUAGES: { code: Language; label: string }[] = [
-  { code: "en", label: "English" },
-  { code: "es", label: "Español" },
-  { code: "fr", label: "Français" },
-  { code: "de", label: "Deutsch" },
-  { code: "it", label: "Italiano" },
-  { code: "pt", label: "Português" },
-  { code: "zh", label: "中文" },
-  { code: "ja", label: "日本語" },
-  { code: "ko", label: "한국어" },
-];
+import type { Length, StoryRequest, Theme } from "./StoryApp";
 
 const THEMES: { value: Theme; label: string; emoji: string }[] = [
-  { value: "animals", label: "Animals", emoji: "🦊" },
-  { value: "dinosaurs", label: "Dinosaurs", emoji: "🦕" },
-  { value: "dragons", label: "Dragons & Dungeons", emoji: "🐉" },
-  { value: "magic", label: "Magic", emoji: "✨" },
-  { value: "pirates", label: "Pirates", emoji: "🏴‍☠️" },
-  { value: "princesses", label: "Princesses", emoji: "👸" },
-  { value: "knights", label: "Knights", emoji: "🛡️" },
-  { value: "mermaids", label: "Mermaids", emoji: "🧜‍♀️" },
-  { value: "unicorns", label: "Unicorns", emoji: "🦄" },
-  { value: "fairies", label: "Fairies", emoji: "🧚" },
-  { value: "wizards", label: "Wizards", emoji: "🧙" },
-  { value: "robots", label: "Robots", emoji: "🤖" },
-  { value: "superheroes", label: "Superheroes", emoji: "🦸" },
-  { value: "space", label: "Space", emoji: "🚀" },
-  { value: "sea-life", label: "Sea Life", emoji: "🐠" },
-  { value: "ninjas", label: "Ninjas", emoji: "🥷" },
-  { value: "cars-trucks", label: "Cars & Trucks", emoji: "🚗" },
-  { value: "trains", label: "Trains", emoji: "🚂" },
-  { value: "farm-animals", label: "Farm Animals", emoji: "🐮" },
-  { value: "snowy-day", label: "Snowy Day", emoji: "⛄" },
+  { value: "animals",      label: "Animals",         emoji: "🦊" },
+  { value: "dinosaurs",    label: "Dinosaurs",        emoji: "🦕" },
+  { value: "dragons",      label: "Dragons & Dungeons", emoji: "🐉" },
+  { value: "magic",        label: "Magic",            emoji: "✨" },
+  { value: "pirates",      label: "Pirates",          emoji: "🏴‍☠️" },
+  { value: "princesses",   label: "Princesses",       emoji: "👸" },
+  { value: "knights",      label: "Knights",          emoji: "🛡️" },
+  { value: "mermaids",     label: "Mermaids",         emoji: "🧜‍♀️" },
+  { value: "unicorns",     label: "Unicorns",         emoji: "🦄" },
+  { value: "fairies",      label: "Fairies",          emoji: "🧚" },
+  { value: "wizards",      label: "Wizards",          emoji: "🧙" },
+  { value: "robots",       label: "Robots",           emoji: "🤖" },
+  { value: "superheroes",  label: "Superheroes",      emoji: "🦸" },
+  { value: "space",        label: "Space",            emoji: "🚀" },
+  { value: "sea-life",     label: "Sea Life",         emoji: "🐠" },
+  { value: "ninjas",       label: "Ninjas",           emoji: "🥷" },
+  { value: "cars-trucks",  label: "Cars & Trucks",    emoji: "🚗" },
+  { value: "trains",       label: "Trains",           emoji: "🚂" },
+  { value: "farm-animals", label: "Farm Animals",     emoji: "🐮" },
+  { value: "snowy-day",    label: "Snowy Day",        emoji: "⛄" },
 ];
 
 const LENGTHS: { value: Length; label: string; pages: string }[] = [
-  { value: "short", label: "Short", pages: "2 pages" },
+  { value: "short",  label: "Short",  pages: "2 pages" },
   { value: "medium", label: "Medium", pages: "4 pages" },
-  { value: "long", label: "Long", pages: "6 pages" },
+  { value: "long",   label: "Long",   pages: "6 pages" },
 ];
 
-const NAME_PATTERN = /^[A-Za-z][A-Za-z\s'-]{0,49}$/;
+const NAME_PATTERN         = /^[A-Za-z][A-Za-z\s'-]{0,49}$/;
 const CUSTOM_THEME_PATTERN = /^[A-Za-z][A-Za-z0-9\s'\-,&]{0,49}$/;
 
 export default function StoryForm({
@@ -56,29 +44,25 @@ export default function StoryForm({
   isLoading: boolean;
   error: string;
 }) {
-  const [name, setName] = useState("");
-  const [theme, setTheme] = useState<Theme>("animals");
+  const [name, setName]               = useState("");
+  const [theme, setTheme]             = useState<Theme>("animals");
   const [customTheme, setCustomTheme] = useState("");
-  const [length, setLength] = useState<Length>("medium");
-  const [language, setLanguage] = useState<Language>("en");
+  const [length, setLength]           = useState<Length>("medium");
 
-  const trimmedName = name.trim();
+  const trimmedName        = name.trim();
   const trimmedCustomTheme = customTheme.trim();
-  const nameValid = NAME_PATTERN.test(trimmedName);
-  const customActive = trimmedCustomTheme.length > 0;
-  const customValid =
-    !customActive || CUSTOM_THEME_PATTERN.test(trimmedCustomTheme);
-  const effectiveTheme = customActive ? trimmedCustomTheme : theme;
+  const nameValid          = NAME_PATTERN.test(trimmedName);
+  const customActive       = trimmedCustomTheme.length > 0;
+  const customValid        = !customActive || CUSTOM_THEME_PATTERN.test(trimmedCustomTheme);
+  const effectiveTheme     = customActive ? trimmedCustomTheme : theme;
 
-  function selectPreset(t: Theme) {
-    setTheme(t);
-    setCustomTheme("");
-  }
+  function selectPreset(t: Theme) { setTheme(t); setCustomTheme(""); }
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!nameValid || !customValid) return;
-    onSubmit({ name: trimmedName, theme: effectiveTheme, length, language });
+    // Language is always English — selector removed.
+    onSubmit({ name: trimmedName, theme: effectiveTheme, length, language: "en" });
   }
 
   return (
@@ -91,6 +75,7 @@ export default function StoryForm({
       </h1>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4 sm:gap-10">
+        {/* Name */}
         <div className="flex flex-col items-center gap-1 sm:gap-2">
           <label
             htmlFor="name"
@@ -112,22 +97,15 @@ export default function StoryForm({
           />
         </div>
 
+        {/* Theme carousel */}
         <div className="flex flex-col gap-2 sm:gap-3">
-          <span className="text-left text-base sm:text-lg text-amber-50/85">
-            Pick a theme
-          </span>
+          <span className="text-left text-base sm:text-lg text-amber-50/85">Pick a theme</span>
           <div
             className="ks-vscroll-wrap relative h-[180px] sm:h-[240px] overflow-hidden"
             style={{
-              // Dim the night sky in this zone to ~50% so the theme tiles
-              // get visual priority. The mask above fades it in at the edges
-              // so animated objects (clouds, comets, fireflies, stars) move
-              // smoothly into and out of the dimmed area.
               backgroundColor: "rgba(8, 6, 28, 0.5)",
-              maskImage:
-                "linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%)",
-              WebkitMaskImage:
-                "linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%)",
+              maskImage: "linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%)",
+              WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%)",
             }}
           >
             <div className="ks-vscroll-inner grid grid-cols-2 gap-3">
@@ -155,11 +133,10 @@ export default function StoryForm({
               })}
             </div>
           </div>
+
+          {/* Custom theme */}
           <div className="mt-0.5 sm:mt-1 flex flex-col gap-0.5 sm:gap-1">
-            <label
-              htmlFor="custom-theme"
-              className="text-left text-xs sm:text-sm text-amber-50/65 italic"
-            >
+            <label htmlFor="custom-theme" className="text-left text-xs sm:text-sm text-amber-50/65 italic">
               Or pick your own:
             </label>
             <input
@@ -188,10 +165,9 @@ export default function StoryForm({
           </div>
         </div>
 
+        {/* Length */}
         <div className="flex flex-col gap-2 sm:gap-3">
-          <span className="text-left text-base sm:text-lg text-amber-50/85">
-            How long?
-          </span>
+          <span className="text-left text-base sm:text-lg text-amber-50/85">How long?</span>
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {LENGTHS.map((l) => {
               const selected = length === l.value;
@@ -217,28 +193,6 @@ export default function StoryForm({
           </div>
         </div>
 
-        <div className="flex items-center justify-center gap-2 sm:gap-3 -mt-1 sm:-mt-2">
-          <label
-            htmlFor="language"
-            className="text-sm sm:text-base text-amber-50/85"
-          >
-            🌐 Language
-          </label>
-          <select
-            id="language"
-            value={language}
-            onChange={(e) => setLanguage(e.target.value as Language)}
-            disabled={isLoading}
-            className="rounded-md border-2 border-amber-100/25 bg-white/5 backdrop-blur-sm px-2 py-1 text-sm sm:text-base text-amber-50 hover:bg-white/10 focus:border-amber-200 focus:outline-none disabled:opacity-50"
-          >
-            {LANGUAGES.map((l) => (
-              <option key={l.code} value={l.code} className="bg-[#0f0b28] text-amber-50">
-                {l.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
         <button
           type="submit"
           disabled={isLoading || !nameValid || !customValid}
@@ -248,9 +202,7 @@ export default function StoryForm({
         </button>
       </form>
 
-      {error && (
-        <p className="mt-6 text-amber-100 italic">{error}</p>
-      )}
+      {error && <p className="mt-6 text-amber-100 italic">{error}</p>}
     </div>
   );
 }
