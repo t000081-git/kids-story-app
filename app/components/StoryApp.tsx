@@ -73,20 +73,68 @@ export default function StoryApp() {
     setError("");
     setTheme(req.theme);
     setLanguage(req.language);
+
     try {
       const res = await fetch("/api/generate-story", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(req),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Something went wrong. Please try again.");
+
+      // Validation errors (400/429/500) come back as plain JSON before the
+      // stream opens. Everything else is an SSE stream.
+      const contentType = res.headers.get("content-type") ?? "";
+      if (!contentType.includes("text/event-stream")) {
+        const data = await res.json().catch(() => ({}));
+        setError(
+          (data as { error?: string }).error ?? "Something went wrong. Please try again.",
+        );
         setStatus("error");
         return;
       }
-      setStory(data);
-      setStatus("done");
+
+      if (!res.body) {
+        setError("Something went wrong. Please try again.");
+        setStatus("error");
+        return;
+      }
+
+      // Read the SSE stream — ignore heartbeat comments (": heartbeat"),
+      // act on "data: {...}" lines.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let resolved = false;
+
+      outer: while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = JSON.parse(line.slice(6)) as
+            | { error: string }
+            | { title: string; pages: string[] };
+          if ("error" in data) {
+            setError(data.error);
+            setStatus("error");
+          } else {
+            setStory(data);
+            setStatus("done");
+          }
+          resolved = true;
+          break outer;
+        }
+      }
+
+      if (!resolved) {
+        setError("Something went wrong. Please try again.");
+        setStatus("error");
+      }
     } catch {
       setError("Could not reach the storyteller. Please check your connection.");
       setStatus("error");

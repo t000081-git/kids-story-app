@@ -149,9 +149,19 @@ The "pages" array MUST contain exactly ${pageCount} string entries.`;
 
 type GeneratedStory = { title: string; pages: string[] };
 
-// Each model attempt gets 13 s. Two models × 13 s = 26 s worst-case,
-// comfortably inside the 30 s Edge limit with room for overhead.
-const FETCH_TIMEOUT_MS = 13_000;
+// Each model attempt gets 25 s. All models are fired IN PARALLEL so the
+// fastest one wins — we're not limited by the slowest queue any more.
+// Belt-and-suspenders: AbortController + Promise.race both enforce the limit
+// so we're not relying on either alone (AbortController can be flaky in
+// some Edge runtimes).
+const MODEL_TIMEOUT_MS = 25_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`timed out after ${ms} ms`)), ms),
+  );
+  return Promise.race([promise, timeout]);
+}
 
 async function tryGenerate(
   apiKey: string,
@@ -161,11 +171,11 @@ async function tryGenerate(
   pageCount: number,
 ): Promise<GeneratedStory> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  // AbortController as a best-effort cancel on the outgoing fetch
+  const abortTimer = setTimeout(() => controller.abort(), MODEL_TIMEOUT_MS);
 
-  let upstream: Response;
   try {
-    upstream = await fetch(
+    const upstream = await fetch(
       "https://openrouter.ai/api/v1/chat/completions",
       {
         signal: controller.signal,
@@ -187,47 +197,46 @@ async function tryGenerate(
         }),
       },
     );
+
+    if (!upstream.ok) {
+      const errText = await upstream.text().catch(() => "");
+      throw new Error(`upstream ${upstream.status}: ${errText.slice(0, 200)}`);
+    }
+
+    const data = await upstream.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) {
+      throw new Error("empty content");
+    }
+
+    // Some models wrap JSON in ```json ... ``` even when asked for raw.
+    const cleaned = content
+      .trim()
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
+
+    let parsed: { title?: unknown; pages?: unknown };
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      throw new Error("invalid json");
+    }
+
+    if (
+      typeof parsed.title !== "string" ||
+      !parsed.title.trim() ||
+      !Array.isArray(parsed.pages) ||
+      parsed.pages.length !== pageCount ||
+      !parsed.pages.every((p) => typeof p === "string" && p.trim().length > 0)
+    ) {
+      throw new Error("invalid shape");
+    }
+
+    return { title: parsed.title.trim(), pages: parsed.pages as string[] };
   } finally {
-    clearTimeout(timer);
+    clearTimeout(abortTimer);
   }
-
-  if (!upstream.ok) {
-    const errText = await upstream.text().catch(() => "");
-    throw new Error(`upstream ${upstream.status}: ${errText.slice(0, 200)}`);
-  }
-
-  const data = await upstream.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== "string" || !content.trim()) {
-    throw new Error("empty content");
-  }
-
-  // Some models wrap JSON in ```json ... ``` even when asked for raw.
-  // Strip that defensively before parsing.
-  const cleaned = content
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/, "")
-    .trim();
-
-  let parsed: { title?: unknown; pages?: unknown };
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new Error("invalid json");
-  }
-
-  if (
-    typeof parsed.title !== "string" ||
-    !parsed.title.trim() ||
-    !Array.isArray(parsed.pages) ||
-    parsed.pages.length !== pageCount ||
-    !parsed.pages.every((p) => typeof p === "string" && p.trim().length > 0)
-  ) {
-    throw new Error("invalid shape");
-  }
-
-  return { title: parsed.title.trim(), pages: parsed.pages as string[] };
 }
 
 export async function POST(req: Request) {
@@ -306,34 +315,53 @@ export async function POST(req: Request) {
   const systemPrompt = buildSystemPrompt(pageCount, language);
   const userPrompt = `Write a ${pageCount}-page bedtime story for a child named ${rawName}. The theme is: ${themePhrase}. Write the entire story in ${LANGUAGE_NAME[language]}.`;
 
-  // One attempt per model — fail fast so we use as little of the 30 s
-  // Edge budget as possible on a slow or unavailable model.
-  let lastError: unknown = null;
-  for (const model of MODELS) {
-    try {
-      const story = await tryGenerate(
-        apiKey,
-        model,
-        systemPrompt,
-        userPrompt,
-        pageCount,
-      );
-      return NextResponse.json(story);
-    } catch (e) {
-      lastError = e;
-      console.error(
-        `Story generation failed (model=${model}):`,
-        e instanceof Error ? e.message : e,
-      );
-    }
-  }
+  // Stream the response so Vercel's edge connection stays alive while we
+  // wait for the LLM. A heartbeat comment is sent every 5 s so the
+  // connection is never considered idle. All models are raced in parallel —
+  // the first to succeed wins, avoiding sequential queue-wait stacking.
+  const encoder = new TextEncoder();
 
-  console.error("All models exhausted:", lastError);
-  return NextResponse.json(
-    {
-      error:
-        "The storyteller is having a quiet moment. Please try again — sometimes a second try is all it takes.",
+  const stream = new ReadableStream({
+    async start(controller) {
+      const enqueue = (line: string) =>
+        controller.enqueue(encoder.encode(line));
+
+      // Keep the connection warm while the LLM thinks
+      const heartbeat = setInterval(
+        () => enqueue(": heartbeat\n\n"),
+        5_000,
+      );
+
+      try {
+        const story = await withTimeout(
+          Promise.any(
+            MODELS.map((model) =>
+              tryGenerate(apiKey, model, systemPrompt, userPrompt, pageCount),
+            ),
+          ),
+          MODEL_TIMEOUT_MS,
+        );
+        enqueue(`data: ${JSON.stringify(story)}\n\n`);
+      } catch (err) {
+        console.error("All models failed:", err instanceof Error ? err.message : err);
+        enqueue(
+          `data: ${JSON.stringify({
+            error:
+              "The storyteller is having a quiet moment. Please try again — sometimes a second try is all it takes.",
+          })}\n\n`,
+        );
+      } finally {
+        clearInterval(heartbeat);
+        controller.close();
+      }
     },
-    { status: 502 },
-  );
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }
