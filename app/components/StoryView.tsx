@@ -157,6 +157,11 @@ export default function StoryView({
   const speechStartTimeRef   = useRef<number | null>(null);
   // Tracks current imageLoaded state without stale closure in the auto-play effect
   const imageLoadedRef       = useRef(false);
+  // Per-page prefetch status — true once the browser has fully received the
+  // image data (or received an error).  Auto-narration reads these instead of
+  // the <img> element's onLoad so it doesn't need to wait for the DOM.
+  const pageImgReadyRef      = useRef<boolean[]>([]);
+  const pageImgErrorRef      = useRef<boolean[]>([]);
   // Hold strong references to prefetch Image objects so the browser doesn't
   // GC them mid-request and cancel the in-flight illustration fetches.
   const prefetchRefsRef      = useRef<HTMLImageElement[]>([]);
@@ -180,30 +185,47 @@ export default function StoryView({
     [story, theme],
   );
 
-  // Prefetch ALL page illustrations upfront and keep strong refs so the
-  // browser doesn't GC the Image objects mid-request (which would cancel
-  // the in-flight fetch).  Cache-Control: immutable on the route means
-  // subsequent renders get instant cache hits.
+  // ── Background pre-load for ALL pages ──────────────────────────────────
+  // Fires once when the story first appears.  Every page's illustration is
+  // fetched in parallel and strong Image refs are kept alive so the browser
+  // never GCs them mid-request.  Cache-Control: immutable on the API route
+  // means the browser caches each response; when the <img> element later
+  // renders with the same URL it gets an instant cache hit.
+  //
+  // pageImgReadyRef[i] / pageImgErrorRef[i] are set as each fetch finishes.
+  // The page-change effect below reads these to skip "Painting…" on pages
+  // whose images are already in the cache.
   useEffect(() => {
-    prefetchRefsRef.current = imageUrls.map((u) => {
+    const n = imageUrls.length;
+    pageImgReadyRef.current = new Array(n).fill(false);
+    pageImgErrorRef.current = new Array(n).fill(false);
+
+    const imgs = imageUrls.map((url, i) => {
       const img = new Image();
-      img.src = u;
+      img.onload = () => {
+        pageImgReadyRef.current[i] = true;
+        // If the user is currently on this page and still waiting, flip
+        // imageLoaded so the placeholder disappears without a re-navigate.
+        if (i === pageIdxRef.current) {
+          setImageLoaded(true);
+          imageLoadedRef.current = true;
+        }
+      };
+      img.onerror = () => {
+        pageImgReadyRef.current[i] = true;  // treat error as "done"
+        pageImgErrorRef.current[i] = true;
+        if (i === pageIdxRef.current) {
+          setImageError(true);
+          setImageLoaded(true);
+          imageLoadedRef.current = true;
+        }
+      };
+      img.src = url;
       return img;
     });
+    prefetchRefsRef.current = imgs;
     return () => { prefetchRefsRef.current = []; };
-  }, [imageUrls]);
-
-  // Re-kick the next page's prefetch whenever we land on a new page — this
-  // acts as a second safety net in case the initial global prefetch missed it
-  // or the Pollinations.ai response hadn't arrived yet.
-  useEffect(() => {
-    if (pageIdx < imageUrls.length - 1) {
-      const img = new Image();
-      img.src = imageUrls[pageIdx + 1];
-      // Keep alongside the global refs so it stays alive
-      prefetchRefsRef.current[pageIdx + 1] = img;
-    }
-  }, [pageIdx, imageUrls]);
+  }, [imageUrls]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const ok = typeof window !== "undefined" && "speechSynthesis" in window;
@@ -221,17 +243,25 @@ export default function StoryView({
   useEffect(() => {
     window.speechSynthesis?.cancel();
     setIsPlaying(false);
-    setImageLoaded(false);
-    imageLoadedRef.current = false; // reset synchronously so auto-play effect sees false
-    setImageError(false);
     setHighlight(-1);
+    // If this page's image was already fetched in the background, show it
+    // immediately — no "Painting your picture…" placeholder needed.
+    const ready = pageImgReadyRef.current[pageIdx] ?? false;
+    const error = pageImgErrorRef.current[pageIdx] ?? false;
+    setImageLoaded(ready);
+    imageLoadedRef.current = ready;
+    setImageError(error);
   }, [pageIdx]);
 
   // Auto-narration: fires whenever pageIdx changes.  If autoPlayPendingRef is
-  // set (meaning the page advance came from utterance.onend, not a tap), we
-  // wait for the illustration to load before starting narration.
-  // Polls imageLoadedRef every 150ms; starts after image loads OR after 4s
-  // (whichever comes first) so the reader always hears the full story.
+  // set (the page advance came from utterance.onend, not a manual tap), wait
+  // for the illustration to be ready before starting narration.
+  //
+  // We check pageImgReadyRef (set by the background prefetch onload/onerror)
+  // rather than the <img> element's own onLoad — the prefetch tracks network
+  // completion, which is earlier and more reliable.  For a story whose images
+  // were all pre-loaded in the background, this check is true immediately and
+  // narration starts after just the 400 ms text-animation settle time.
   useEffect(() => {
     if (!autoPlayPendingRef.current) return;
     autoPlayPendingRef.current = false;
@@ -240,23 +270,22 @@ export default function StoryView({
 
     function beginNarration() {
       if (iid) { clearInterval(iid); iid = null; }
-      // Small buffer (400ms) so the new page text animation settles first
+      // 400ms buffer so the page-turn text bloom animation settles first
       tid = setTimeout(() => handleListenRef.current(), 400);
     }
 
-    if (imageLoadedRef.current) {
+    if (pageImgReadyRef.current[pageIdx]) {
       beginNarration();
     } else {
-      // Poll every 100ms; give Pollinations.ai up to 8s before giving up.
-      // With a warm prefetch cache the image fires in <50ms so narration
-      // starts with effectively no perceptible delay.
-      const deadline = Date.now() + 8000;
+      // Image still loading — poll every 100ms.  No hard deadline: we keep
+      // waiting until the prefetch either succeeds or errors (onerror also
+      // sets ready=true so we never hang).
       iid = setInterval(() => {
-        if (imageLoadedRef.current || Date.now() >= deadline) beginNarration();
+        if (pageImgReadyRef.current[pageIdx]) beginNarration();
       }, 100);
     }
 
-    // Only cancel if the user manually navigates away before narration starts
+    // Clean up if the user manually navigates away before narration starts
     return () => { if (tid) clearTimeout(tid); if (iid) clearInterval(iid); };
   }, [pageIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
