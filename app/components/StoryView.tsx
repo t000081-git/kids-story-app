@@ -7,6 +7,13 @@ import type { SavedStory, ShareableStory } from "@/lib/saved-stories";
 import { buildShareUrl, updateSavedStory } from "@/lib/saved-stories";
 import { parseBrowser, parseOS } from "./SavedStoryStars";
 
+// ─── ElevenLabs alignment type ───────────────────────────────────────────────
+type ELAlignment = {
+  characters:                    string[];
+  character_start_times_seconds: number[];
+  character_end_times_seconds:   number[];
+};
+
 // ─── Magic Ink animation ─────────────────────────────────────────────────────
 const inkContainerExit = {
   opacity: 0,
@@ -143,6 +150,7 @@ export default function StoryView({
   const [isPermanent, setIsPermanent]     = useState(false);
   const [autoNarrate, setAutoNarrate]     = useState(false);
   const [isSavingCloud, setIsSavingCloud] = useState(false);
+  const [isFetching,   setIsFetching]    = useState(false); // loading EL audio
 
   // Refs for stale-closure safety inside async speech event callbacks
   const autoNarrateRef  = useRef(false);
@@ -165,6 +173,12 @@ export default function StoryView({
   // Hold strong references to prefetch Image objects so the browser doesn't
   // GC them mid-request and cancel the in-flight illustration fetches.
   const prefetchRefsRef      = useRef<HTMLImageElement[]>([]);
+  // ElevenLabs audio playback
+  const audioCtxRef          = useRef<AudioContext | null>(null);
+  const audioSrcRef          = useRef<AudioBufferSourceNode | null>(null);
+  const audioFetchAbortRef   = useRef<AbortController | null>(null);
+  // Per-page audio cache so re-plays and auto-narration are instant (no re-fetch)
+  const pageAudioRef         = useRef<Map<number, { buffer: AudioBuffer; alignment: ELAlignment }>>(new Map());
 
   useEffect(() => { autoNarrateRef.current  = autoNarrate;   }, [autoNarrate]);
   useEffect(() => { imageLoadedRef.current  = imageLoaded;   }, [imageLoaded]);
@@ -241,8 +255,14 @@ export default function StoryView({
   }, []);
 
   useEffect(() => {
+    // Stop all audio (Web Speech + ElevenLabs) and any in-flight fetch
     window.speechSynthesis?.cancel();
+    try { audioSrcRef.current?.stop(); } catch { /* already stopped */ }
+    audioSrcRef.current = null;
+    audioFetchAbortRef.current?.abort();
+    audioFetchAbortRef.current = null;
     setIsPlaying(false);
+    setIsFetching(false);
     setHighlight(-1);
     // If this page's image was already fetched in the background, show it
     // immediately — no "Painting your picture…" placeholder needed.
@@ -289,15 +309,79 @@ export default function StoryView({
     return () => { if (tid) clearTimeout(tid); if (iid) clearInterval(iid); };
   }, [pageIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleListen() {
-    if (!supported) return;
-    if (isPlaying) {
-      window.speechSynthesis.cancel();
+  // ── Audio helpers ─────────────────────────────────────────────────────────
+
+  function getAudioCtx(): AudioContext {
+    if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
+      audioCtxRef.current = new AudioContext();
+    }
+    return audioCtxRef.current;
+  }
+
+  async function base64ToAudioBuffer(b64: string): Promise<AudioBuffer> {
+    const binary = atob(b64);
+    const bytes  = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return getAudioCtx().decodeAudioData(bytes.buffer);
+  }
+
+  // Play a decoded AudioBuffer with pixel-perfect karaoke using EL timestamps.
+  function playElevenLabs(buffer: AudioBuffer, alignment: ELAlignment, forPageIdx: number) {
+    const ctx = getAudioCtx();
+    try { audioSrcRef.current?.stop(); } catch { /* already stopped */ }
+
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(ctx.destination);
+    audioSrcRef.current = src;
+
+    // Schedule one setTimeout per word using the exact character start time
+    // from ElevenLabs — eliminates all estimation drift.
+    const charTimes = alignment.character_start_times_seconds;
+    const wordTimers: ReturnType<typeof setTimeout>[] = [];
+    wordSegments.forEach(({ start }) => {
+      const t = charTimes[start];
+      if (t !== undefined) {
+        wordTimers.push(setTimeout(() => setHighlight(start), t * 1000));
+      }
+    });
+
+    src.onended = () => {
+      wordTimers.forEach(clearTimeout);
+      audioSrcRef.current = null;
       setIsPlaying(false);
       setHighlight(-1);
-      return;
-    }
+      // Auto-narration
+      if (autoNarrateRef.current && pageIdxRef.current < totalRef.current - 1) {
+        autoPlayPendingRef.current = true;
+        setPageIdx((p) => p + 1);
+      }
+    };
 
+    src.start(0);
+    setIsPlaying(true);
+
+    // Background-fetch the NEXT page's audio while this one plays so
+    // auto-narration transitions are instant (no loading gap between pages).
+    const nextIdx = forPageIdx + 1;
+    if (nextIdx < story.pages.length && !pageAudioRef.current.has(nextIdx)) {
+      fetch("/api/narrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: story.pages[nextIdx], language }),
+      })
+        .then((r) => r.ok ? r.json() : Promise.reject())
+        .then((data: { audioBase64: string; alignment: ELAlignment }) =>
+          base64ToAudioBuffer(data.audioBase64).then((buf) => {
+            pageAudioRef.current.set(nextIdx, { buffer: buf, alignment: data.alignment });
+          }),
+        )
+        .catch(() => {});
+    }
+  }
+
+  // ── Web Speech API fallback (iOS Safari / offline) ────────────────────────
+  function playWebSpeech() {
     const utterance  = new SpeechSynthesisUtterance(story.pages[pageIdx]);
     utterance.rate   = 0.95;
     utterance.pitch  = 1.0;
@@ -312,26 +396,13 @@ export default function StoryView({
     let fallbackIval: ReturnType<typeof setInterval> | null = null;
     let safetyTimer:  ReturnType<typeof setTimeout>  | null = null;
 
-    // ── Karaoke fallback (iOS Safari: onboundary never fires) ──────────────
-    // Runs an interval every 80ms that continuously estimates which word is
-    // currently being spoken based on elapsed time.  This is more resilient
-    // than pre-scheduled per-word timers because it self-corrects every tick
-    // rather than locking in the drift from the first tick.
-    //
-    // Rate default: 10 chars/sec at rate=1.0.
-    //   iOS TTS at ~125 wpm × ~5 chars/word × 1 space = ~10.4 chars/sec.
-    //   Previous approach used 13 chars/sec (≈ 25% too fast → highlights
-    //   ran 1-2 words ahead of the voice).  10 is a much better baseline.
-    //   After page 1, calibratedRateRef holds the measured chars/ms from the
-    //   actual utterance duration, so pages 2+ self-calibrate automatically.
     function startFallback() {
-      if (fallbackIval !== null) return; // already running
+      if (fallbackIval !== null) return;
       const charsPerMs = calibratedRateRef.current ?? (10 * utterance.rate / 1000);
       fallbackIval = setInterval(() => {
         if (boundaryFired || speechStartTimeRef.current === null) return;
-        const elapsed  = Date.now() - speechStartTimeRef.current;
-        const charPos  = elapsed * charsPerMs;
-        // Find the last word whose start offset ≤ estimated char position
+        const elapsed = Date.now() - speechStartTimeRef.current;
+        const charPos = elapsed * charsPerMs;
         let active = -1;
         for (const w of wordSegments) {
           if (w.start <= charPos) active = w.start;
@@ -341,14 +412,11 @@ export default function StoryView({
       }, 80);
     }
 
-    // onstart fires when iOS audio actually begins — record the exact moment
-    // and start the rolling highlight estimator immediately.
     utterance.onstart = () => {
       if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = null; }
       speechStartTimeRef.current = Date.now();
       startFallback();
     };
-    // Safety net: if onstart never fires (some Android WebViews), kick after 600ms.
     safetyTimer = setTimeout(() => {
       speechStartTimeRef.current = Date.now();
       startFallback();
@@ -366,17 +434,13 @@ export default function StoryView({
     }
 
     utterance.onend = () => {
-      // Measure actual speech duration → calibrate chars/ms for next page
       if (speechStartTimeRef.current !== null) {
         const elapsed = Date.now() - speechStartTimeRef.current;
-        if (elapsed > 500 && pageText.length > 10) {
+        if (elapsed > 500 && pageText.length > 10)
           calibratedRateRef.current = pageText.length / elapsed;
-        }
         speechStartTimeRef.current = null;
       }
       cleanup();
-      // Auto-narration: set ref BEFORE setPageIdx so the pageIdx effect
-      // sees it as true in the same React flush.
       if (autoNarrateRef.current && pageIdxRef.current < totalRef.current - 1) {
         autoPlayPendingRef.current = true;
         setPageIdx((p) => p + 1);
@@ -386,6 +450,62 @@ export default function StoryView({
 
     window.speechSynthesis.speak(utterance);
     setIsPlaying(true);
+  }
+
+  // ── Main entry point ──────────────────────────────────────────────────────
+  // Tries ElevenLabs first (beautiful voice + perfect karaoke timing).
+  // Falls back to Web Speech API if EL isn't configured or the request fails.
+  async function handleListen() {
+    // Stop button: cancel everything in-flight
+    if (isPlaying || isFetching) {
+      window.speechSynthesis?.cancel();
+      try { audioSrcRef.current?.stop(); } catch { /* already stopped */ }
+      audioSrcRef.current = null;
+      audioFetchAbortRef.current?.abort();
+      audioFetchAbortRef.current = null;
+      setIsPlaying(false);
+      setIsFetching(false);
+      setHighlight(-1);
+      return;
+    }
+
+    // Use cached audio if available (re-play or pre-fetched next page)
+    const cached = pageAudioRef.current.get(pageIdx);
+    if (cached) {
+      playElevenLabs(cached.buffer, cached.alignment, pageIdx);
+      return;
+    }
+
+    // Fetch from ElevenLabs
+    const abort = new AbortController();
+    audioFetchAbortRef.current = abort;
+    setIsFetching(true);
+
+    try {
+      const res = await fetch("/api/narrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: story.pages[pageIdx], language }),
+        signal: abort.signal,
+      });
+
+      if (res.ok) {
+        const data = await res.json() as { audioBase64: string; alignment: ELAlignment };
+        const buffer = await base64ToAudioBuffer(data.audioBase64);
+        pageAudioRef.current.set(pageIdx, { buffer, alignment: data.alignment });
+        setIsFetching(false);
+        audioFetchAbortRef.current = null;
+        playElevenLabs(buffer, data.alignment, pageIdx);
+        return;
+      }
+    } catch (err) {
+      if ((err as Error).name === "AbortError") return; // user hit Stop
+    }
+
+    // ElevenLabs unavailable — fall back to Web Speech API
+    setIsFetching(false);
+    audioFetchAbortRef.current = null;
+    if (supported) playWebSpeech();
   }
 
   // Keep the ref current so the autoPlayPending effect always calls the
@@ -648,13 +768,13 @@ export default function StoryView({
         )}
 
         {/* Read to me + Auto-narration toggle */}
-        {supported && (
-          <div className="flex-shrink-0 flex items-center justify-center gap-3 pt-1.5 sm:pt-2">
+        <div className="flex-shrink-0 flex items-center justify-center gap-3 pt-1.5 sm:pt-2">
             <button
-              onClick={handleListen}
-              className="rounded-full border-2 border-amber-900/30 px-5 sm:px-6 py-1 sm:py-1.5 text-sm sm:text-base text-amber-900 transition-colors hover:bg-amber-900/5"
+              onClick={() => { void handleListen(); }}
+              disabled={false}
+              className="rounded-full border-2 border-amber-900/30 px-5 sm:px-6 py-1 sm:py-1.5 text-sm sm:text-base text-amber-900 transition-colors hover:bg-amber-900/5 disabled:opacity-60"
             >
-              {isPlaying ? "■ Stop" : "▶ Read to me"}
+              {isPlaying ? "■ Stop" : isFetching ? "⏳ Loading…" : "▶ Read to me"}
             </button>
 
             {/* Auto-narration checkbox: advances pages automatically until the end */}
@@ -682,7 +802,6 @@ export default function StoryView({
               </span>
             </label>
           </div>
-        )}
       </div>
 
       {/* ── Navigation — always at the same position ─────────────────────── */}
