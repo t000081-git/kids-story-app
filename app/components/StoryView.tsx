@@ -157,6 +157,9 @@ export default function StoryView({
   const speechStartTimeRef   = useRef<number | null>(null);
   // Tracks current imageLoaded state without stale closure in the auto-play effect
   const imageLoadedRef       = useRef(false);
+  // Hold strong references to prefetch Image objects so the browser doesn't
+  // GC them mid-request and cancel the in-flight illustration fetches.
+  const prefetchRefsRef      = useRef<HTMLImageElement[]>([]);
 
   useEffect(() => { autoNarrateRef.current  = autoNarrate;   }, [autoNarrate]);
   useEffect(() => { imageLoadedRef.current  = imageLoaded;   }, [imageLoaded]);
@@ -177,9 +180,30 @@ export default function StoryView({
     [story, theme],
   );
 
+  // Prefetch ALL page illustrations upfront and keep strong refs so the
+  // browser doesn't GC the Image objects mid-request (which would cancel
+  // the in-flight fetch).  Cache-Control: immutable on the route means
+  // subsequent renders get instant cache hits.
   useEffect(() => {
-    imageUrls.forEach((u) => { const img = new Image(); img.src = u; });
+    prefetchRefsRef.current = imageUrls.map((u) => {
+      const img = new Image();
+      img.src = u;
+      return img;
+    });
+    return () => { prefetchRefsRef.current = []; };
   }, [imageUrls]);
+
+  // Re-kick the next page's prefetch whenever we land on a new page — this
+  // acts as a second safety net in case the initial global prefetch missed it
+  // or the Pollinations.ai response hadn't arrived yet.
+  useEffect(() => {
+    if (pageIdx < imageUrls.length - 1) {
+      const img = new Image();
+      img.src = imageUrls[pageIdx + 1];
+      // Keep alongside the global refs so it stays alive
+      prefetchRefsRef.current[pageIdx + 1] = img;
+    }
+  }, [pageIdx, imageUrls]);
 
   useEffect(() => {
     const ok = typeof window !== "undefined" && "speechSynthesis" in window;
@@ -223,10 +247,13 @@ export default function StoryView({
     if (imageLoadedRef.current) {
       beginNarration();
     } else {
-      const deadline = Date.now() + 4000; // max 4s wait for illustration
+      // Poll every 100ms; give Pollinations.ai up to 8s before giving up.
+      // With a warm prefetch cache the image fires in <50ms so narration
+      // starts with effectively no perceptible delay.
+      const deadline = Date.now() + 8000;
       iid = setInterval(() => {
         if (imageLoadedRef.current || Date.now() >= deadline) beginNarration();
-      }, 150);
+      }, 100);
     }
 
     // Only cancel if the user manually navigates away before narration starts
