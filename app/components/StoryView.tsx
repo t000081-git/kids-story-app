@@ -280,43 +280,58 @@ export default function StoryView({
 
     const pageText    = story.pages[pageIdx];
     let boundaryFired = false;
-    const wordTimers: ReturnType<typeof setTimeout>[] = [];
-    let safetyTimer:  ReturnType<typeof setTimeout>   | null = null;
+    let fallbackIval: ReturnType<typeof setInterval> | null = null;
+    let safetyTimer:  ReturnType<typeof setTimeout>  | null = null;
 
     // ── Karaoke fallback (iOS Safari: onboundary never fires) ──────────────
-    // Schedule one setTimeout per word at its estimated start time.
-    // Uses the measured chars/ms from the previous page (calibratedRateRef)
-    // so accuracy improves after page 1.  Falls back to 13 chars/s for p.1.
+    // Runs an interval every 80ms that continuously estimates which word is
+    // currently being spoken based on elapsed time.  This is more resilient
+    // than pre-scheduled per-word timers because it self-corrects every tick
+    // rather than locking in the drift from the first tick.
+    //
+    // Rate default: 10 chars/sec at rate=1.0.
+    //   iOS TTS at ~125 wpm × ~5 chars/word × 1 space = ~10.4 chars/sec.
+    //   Previous approach used 13 chars/sec (≈ 25% too fast → highlights
+    //   ran 1-2 words ahead of the voice).  10 is a much better baseline.
+    //   After page 1, calibratedRateRef holds the measured chars/ms from the
+    //   actual utterance duration, so pages 2+ self-calibrate automatically.
     function startFallback() {
-      if (wordTimers.length > 0) return; // already scheduled
-      const charsPerMs = calibratedRateRef.current ?? (13 * utterance.rate / 1000);
-      wordSegments.forEach(({ start }) => {
-        wordTimers.push(
-          setTimeout(() => {
-            if (!boundaryFired) setHighlight(start);
-          }, start / charsPerMs),
-        );
-      });
+      if (fallbackIval !== null) return; // already running
+      const charsPerMs = calibratedRateRef.current ?? (10 * utterance.rate / 1000);
+      fallbackIval = setInterval(() => {
+        if (boundaryFired || speechStartTimeRef.current === null) return;
+        const elapsed  = Date.now() - speechStartTimeRef.current;
+        const charPos  = elapsed * charsPerMs;
+        // Find the last word whose start offset ≤ estimated char position
+        let active = -1;
+        for (const w of wordSegments) {
+          if (w.start <= charPos) active = w.start;
+          else break;
+        }
+        if (active >= 0) setHighlight(active);
+      }, 80);
     }
 
-    // onstart fires the moment iOS audio begins playing — start immediately,
-    // no startup delay needed.
+    // onstart fires when iOS audio actually begins — record the exact moment
+    // and start the rolling highlight estimator immediately.
     utterance.onstart = () => {
       if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = null; }
-      speechStartTimeRef.current = Date.now(); // record actual speech start
+      speechStartTimeRef.current = Date.now();
       startFallback();
     };
-    // Safety net: start 600ms after speak() in case onstart never fires.
-    safetyTimer = setTimeout(startFallback, 600);
+    // Safety net: if onstart never fires (some Android WebViews), kick after 600ms.
+    safetyTimer = setTimeout(() => {
+      speechStartTimeRef.current = Date.now();
+      startFallback();
+    }, 600);
 
     utterance.onboundary = (e: SpeechSynthesisEvent) => {
       if (e.name === "word" || e.name === "sentence") { boundaryFired = true; setHighlight(e.charIndex); }
     };
 
     function cleanup() {
-      if (safetyTimer)  clearTimeout(safetyTimer);
-      wordTimers.forEach(clearTimeout);
-      wordTimers.length = 0;
+      if (safetyTimer)  { clearTimeout(safetyTimer);  safetyTimer  = null; }
+      if (fallbackIval) { clearInterval(fallbackIval); fallbackIval = null; }
       setIsPlaying(false);
       setHighlight(-1);
     }
