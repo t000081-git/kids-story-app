@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { Language, Length, StoryRequest, Theme } from "./StoryApp";
 import ThemeCarousel from "./ThemeCarousel";
 
@@ -74,7 +74,9 @@ export default function StoryForm({
   isLoading: boolean;
   error: string;
 }) {
-  const shuffledThemes = useMemo(() => shuffle(ALL_THEMES), []);
+  // Start with deterministic order (SSR-safe), shuffle on client after hydration
+  const [shuffledThemes, setShuffledThemes] = useState(ALL_THEMES);
+  useEffect(() => { setShuffledThemes(shuffle(ALL_THEMES)); }, []);
 
   const [name,        setName]        = useState("");
   const [theme,       setTheme]       = useState<Theme>("animals");
