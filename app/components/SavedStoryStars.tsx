@@ -146,8 +146,22 @@ export default function SavedStoryStars() {
         const size    = SIZES[Math.min((story.rating || 1) - 1, 4)];
         const isGalaxy = !!story.shareUrl;
         const delay   = rand(story.id, 2) * 3;
-        const dur     = 2.2 + rand(story.id, 3) * 1.8;
+        // Stars twinkle fast (2.2–4s); galaxies spin slowly (15–25s)
+        const dur     = isGalaxy
+          ? 15 + rand(story.id, 3) * 10
+          : 2.2 + rand(story.id, 3) * 1.8;
         const isHov   = hovered === story.id;
+
+        // ── Tooltip placement: keep within all four screen edges ──────────
+        // Vertical: show below star when near top (y < 22), else above
+        // Horizontal: left-anchor near left edge, right-anchor near right edge
+        const tipBelow  = pos.y < 22;
+        const tipLeft   = pos.x < 20;   // anchor to left side of star
+        const tipRight  = pos.x > 80;   // anchor to right side of star
+        const tipVert   = tipBelow ? "top-full mt-2"    : "bottom-full mb-2";
+        const tipHoriz  = tipLeft  ? "left-0"
+                        : tipRight ? "right-0"
+                        : "left-1/2 -translate-x-1/2";
 
         return (
           <div
@@ -173,13 +187,12 @@ export default function SavedStoryStars() {
               } as React.CSSProperties}
             />
 
-            {/* Hover tooltip — flips below the star when near the top edge */}
+            {/* Tooltip — edge-aware: flips up/down and left/right as needed */}
             {isHov && (
-              <div className={`absolute z-[60] left-1/2 -translate-x-1/2
+              <div className={`absolute z-[60] ${tipVert} ${tipHoriz}
                              bg-[#0f0b28]/95 border border-amber-200/25 rounded-xl
                              p-2.5 min-w-[150px] max-w-[200px] shadow-xl
-                             backdrop-blur-sm pointer-events-none
-                             ${pos.y < 22 ? "top-full mt-2" : "bottom-full mb-2"}`}>
+                             backdrop-blur-sm pointer-events-none`}>
                 <p className="text-xs text-amber-100 font-medium leading-snug line-clamp-2 mb-1">
                   {story.title}
                 </p>
@@ -188,7 +201,7 @@ export default function SavedStoryStars() {
                   <span className="text-amber-900/50">{"★".repeat(5 - story.rating)}</span>
                 </p>
                 <p className="text-[9px] text-amber-50/50 mt-0.5">
-                  {isGalaxy ? "🌌 Permanent link" : "⭐ Local"}{" "}
+                  {isGalaxy ? "🌌 Cloud saved" : "⭐ Local"}{" "}
                   · {new Date(story.savedAt).toLocaleDateString()}
                 </p>
                 {story.userAgent && (

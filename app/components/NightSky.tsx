@@ -1,19 +1,13 @@
 "use client";
 
-// Note: static twinkling STARS are intentionally removed — saved-story gold
-// stars and purple galaxy orbs (SavedStoryStars) fill that role and grow
-// organically as users save stories.
+// Note: static twinkling STARS removed — saved-story gold stars and spiral
+// galaxies (SavedStoryStars) fill that role and grow as users save stories.
+// FIREFLIES removed per user request.
 
 const CLOUDS: { top: string; duration: string; delay: string; size: number; opacity: number }[] = [
   { top: "14%", duration: "55s", delay: "0s",   size: 60, opacity: 0.55 },
   { top: "38%", duration: "75s", delay: "-20s", size: 48, opacity: 0.4  },
   { top: "62%", duration: "65s", delay: "-40s", size: 54, opacity: 0.45 },
-];
-
-const FIREFLIES: { left: string; top: string; delay: string; duration: string }[] = [
-  { left: "18%", top: "50%", delay: "0.5s", duration: "3.2s" },
-  { left: "78%", top: "55%", delay: "1.8s", duration: "3.8s" },
-  { left: "44%", top: "70%", delay: "2.5s", duration: "3.5s" },
 ];
 
 const COMETS: { top: string; width: number; duration: string; delay: string; tilt: number }[] = [
@@ -22,22 +16,8 @@ const COMETS: { top: string; width: number; duration: string; delay: string; til
 ];
 
 const PULSES: { left: string; top: string; size: string; color: string; duration: string; delay: string }[] = [
-  // Soft amber/peach magical pulse near top-left
-  {
-    left: "-8%", top: "-6%",
-    size: "55%",
-    color: "rgba(255, 220, 160, 0.55)",
-    duration: "14s",
-    delay: "0s",
-  },
-  // Soft violet pulse near bottom-right, offset in time
-  {
-    left: "52%", top: "55%",
-    size: "60%",
-    color: "rgba(190, 170, 255, 0.45)",
-    duration: "19s",
-    delay: "-9s",
-  },
+  { left: "-8%", top: "-6%",  size: "55%", color: "rgba(255, 220, 160, 0.55)", duration: "14s", delay: "0s"  },
+  { left: "52%", top:  "55%", size: "60%", color: "rgba(190, 170, 255, 0.45)", duration: "19s", delay: "-9s" },
 ];
 
 export default function NightSky() {
@@ -46,16 +26,13 @@ export default function NightSky() {
       aria-hidden="true"
       className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
     >
-      {/* Magical lightning pulses (soft, kid-friendly) */}
+      {/* Magical lightning pulses */}
       {PULSES.map((p, i) => (
         <div
           key={`p${i}`}
           className="ks-pulse absolute"
           style={{
-            left: p.left,
-            top: p.top,
-            width: p.size,
-            height: p.size,
+            left: p.left, top: p.top, width: p.size, height: p.size,
             background: `radial-gradient(circle, ${p.color} 0%, transparent 60%)`,
             opacity: 0,
             animation: `ks-pulse ${p.duration} ease-in-out ${p.delay} infinite`,
@@ -68,11 +45,8 @@ export default function NightSky() {
       <span
         className="ks-glow absolute select-none"
         style={{
-          right: "8%",
-          top: "8%",
-          fontSize: "84px",
-          animation:
-            "ks-float 8s ease-in-out infinite, ks-glow 6s ease-in-out infinite",
+          right: "8%", top: "8%", fontSize: "84px",
+          animation: "ks-float 8s ease-in-out infinite, ks-glow 6s ease-in-out infinite",
         }}
       >
         🌙
@@ -84,16 +58,11 @@ export default function NightSky() {
           key={`co${i}`}
           className="ks-comet absolute"
           style={{
-            top: c.top,
-            left: 0,
-            width: `${c.width}px`,
-            height: "1px",
-            background:
-              "linear-gradient(90deg, transparent 0%, rgba(255, 232, 180, 0.7) 75%, rgba(255, 255, 240, 0.95) 97%, transparent 100%)",
+            top: c.top, left: 0, width: `${c.width}px`, height: "1px",
+            background: "linear-gradient(90deg, transparent 0%, rgba(255, 232, 180, 0.7) 75%, rgba(255, 255, 240, 0.95) 97%, transparent 100%)",
             transform: `rotate(${c.tilt}deg)`,
             transformOrigin: "right center",
-            filter:
-              "blur(0.3px) drop-shadow(0 0 3px rgba(255, 220, 150, 0.6))",
+            filter: "blur(0.3px) drop-shadow(0 0 3px rgba(255, 220, 150, 0.6))",
             borderRadius: "9999px",
             animation: `ks-comet ${c.duration} linear ${c.delay} infinite`,
           }}
@@ -106,33 +75,13 @@ export default function NightSky() {
           key={`c${i}`}
           className="ks-drift absolute select-none"
           style={{
-            top: c.top,
-            left: "0",
-            fontSize: `${c.size}px`,
-            opacity: c.opacity,
-            filter: "blur(0.4px)",
+            top: c.top, left: "0", fontSize: `${c.size}px`,
+            opacity: c.opacity, filter: "blur(0.4px)",
             animation: `ks-drift ${c.duration} linear ${c.delay} infinite`,
           }}
         >
           ☁️
         </span>
-      ))}
-
-      {/* Fireflies */}
-      {FIREFLIES.map((f, i) => (
-        <span
-          key={`f${i}`}
-          className="ks-shimmer absolute block rounded-full"
-          style={{
-            left: f.left,
-            top: f.top,
-            width: "10px",
-            height: "10px",
-            background:
-              "radial-gradient(circle, rgba(255,225,140,0.95) 0%, rgba(255,200,80,0.4) 60%, rgba(255,200,80,0) 100%)",
-            animation: `ks-shimmer ${f.duration} ease-in-out ${f.delay} infinite`,
-          }}
-        />
       ))}
     </div>
   );
