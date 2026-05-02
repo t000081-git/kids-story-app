@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { Language, LoadedSavedInfo, Story, Theme } from "./StoryApp";
-import { scheduleMelody, LOOP_DUR } from "@/lib/lullaby-melody";
+import { scheduleMelody, getMelodyStyle, getMelodyLoopDur } from "@/lib/lullaby-melody";
 import { getAudioCache, setAudioCache } from "@/lib/audio-cache";
 import type { SavedStory, ShareableStory } from "@/lib/saved-stories";
 import { buildShareUrl, updateSavedStory } from "@/lib/saved-stories";
@@ -235,6 +235,7 @@ export default function StoryView({
   }, [sing]);
 
   // Lullaby melody — plays as background music while sing mode is active.
+  // Uses a setInterval keepalive so the music never stops mid-story.
   useEffect(() => {
     if (!sing || !isPlaying) {
       const g = melodyGainRef.current;
@@ -248,6 +249,9 @@ export default function StoryView({
 
     const ctx = audioCtxRef.current;
     if (!ctx || ctx.state === "closed") return;
+
+    const style   = getMelodyStyle(theme);
+    const loopDur = getMelodyLoopDur(style);
 
     // Create gain node if needed (or if context was recreated)
     if (!melodyGainRef.current || melodyGainRef.current.context !== ctx) {
@@ -263,12 +267,29 @@ export default function StoryView({
     g.gain.setValueAtTime(g.gain.value, now);
     g.gain.linearRampToValueAtTime(0.65, now + 1.0);
 
+    // Initial burst: schedule 3 loops ahead
     if (melodyScheduledUntilRef.current <= now + 0.1) {
-      scheduleMelody(ctx, g, now, 4);
-      melodyScheduledUntilRef.current = now + 4 * LOOP_DUR;
+      scheduleMelody(ctx, g, now, 3, style);
+      melodyScheduledUntilRef.current = now + 3 * loopDur;
     }
+
+    // Keepalive: every ~8 s check if we're within 20 s of running out;
+    // if so, schedule 3 more loops. This keeps music going indefinitely.
+    const iv = setInterval(() => {
+      const c = audioCtxRef.current;
+      const gn = melodyGainRef.current;
+      if (!c || c.state === "closed" || !gn) return;
+      const t2 = c.currentTime;
+      const ld = getMelodyLoopDur(getMelodyStyle(theme));
+      if (melodyScheduledUntilRef.current <= t2 + 20) {
+        scheduleMelody(c, gn, melodyScheduledUntilRef.current, 3, getMelodyStyle(theme));
+        melodyScheduledUntilRef.current += 3 * ld;
+      }
+    }, 8_000);
+
+    return () => clearInterval(iv);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sing, isPlaying]);
+  }, [sing, isPlaying, theme]);
   useEffect(() => { imageLoadedRef.current  = imageLoaded;   }, [imageLoaded]);
   useEffect(() => {
     pageIdxRef.current = pageIdx;
