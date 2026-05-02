@@ -223,7 +223,7 @@ export default function StoryForm({
         {/* Language — compact flag icons only */}
         <div className="flex items-center gap-2 justify-end">
           <span className="text-xs text-amber-50/50 mr-1">Language:</span>
-          {([["en", "🇬🇧"], ["ar", "🇸🇦"], ["tl", "🇵🇭"]] as [Language, string][]).map(([lang, flag]) => (
+          {([["en", "🇬🇧"], ["ar", "🇸🇦🇰🇼"], ["tl", "🇵🇭"]] as [Language, string][]).map(([lang, flag]) => (
             <button
               key={lang}
               type="button"
@@ -232,7 +232,8 @@ export default function StoryForm({
               aria-label={lang === "en" ? "English" : lang === "ar" ? "Arabic" : "Filipino"}
               aria-pressed={language === lang}
               className={
-                "w-10 h-10 rounded-full border-2 text-xl flex items-center justify-center transition-colors disabled:opacity-50 " +
+                "h-10 rounded-full border-2 flex items-center justify-center transition-colors disabled:opacity-50 " +
+                (lang === "ar" ? "px-2 gap-0.5 text-base " : "w-10 text-xl ") +
                 (language === lang
                   ? "border-amber-200 bg-amber-100/15 shadow-[0_0_12px_rgba(252,211,77,0.3)]"
                   : "border-amber-100/20 bg-white/5 hover:bg-white/10")
@@ -283,7 +284,7 @@ export default function StoryForm({
               aria-hidden="true"
             >
               <defs>
-                <path id="ks-moon-cta" d="M 18,74 Q 55,86 92,74" fill="none" />
+                <path id="ks-moon-cta" d="M 20,62 Q 55,76 90,62" fill="none" />
               </defs>
               <text style={{
                 fill: "rgba(10, 6, 38, 0.90)",
