@@ -30,5 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "Trivia-anime", "Trivia-list-numbers", "Life-Admin-CoPilot", "storista", "pacman", "kids-story-app"]
 }
