@@ -251,7 +251,7 @@ export default function StoryForm({
           style={{ right: "7%", top: "5%" }}
           aria-label={isLoading ? "Writing your story…" : "Tell me a story"}
         >
-          {/* Dim when no valid name; brighten when ready — smooth opacity shift */}
+          {/* Outer wrapper: opacity/filter transition based on name validity */}
           <div
             className="relative w-[101px] h-[109px] sm:w-[146px] sm:h-[157px] transition-[opacity,filter] duration-500"
             style={{
@@ -261,14 +261,16 @@ export default function StoryForm({
                 : "drop-shadow(0 0 6px rgba(255,200,80,0.15)) saturate(0.5)",
             }}
           >
+            {/* Inner wrapper: float + glow animation applied here so moon emoji
+                AND SVG text move as a single unit */}
+            <div
+              className="absolute inset-0 group-hover:drop-shadow-[0_0_32px_rgba(255,215,80,0.95)]"
+              style={{ animation: "ks-float 8s ease-in-out infinite, ks-glow 6s ease-in-out infinite" }}
+            >
             {/* Moon emoji */}
             <span
               className="absolute top-0 left-0 right-0 text-center leading-none select-none
-                         text-[77px] sm:text-[112px]
-                         group-hover:drop-shadow-[0_0_32px_rgba(255,215,80,0.95)]"
-              style={{
-                animation: "ks-float 8s ease-in-out infinite, ks-glow 6s ease-in-out infinite",
-              }}
+                         text-[77px] sm:text-[112px]"
             >
               🌙
             </span>
@@ -293,6 +295,7 @@ export default function StoryForm({
                 </textPath>
               </text>
             </svg>
+            </div>{/* end inner animated wrapper */}
           </div>
         </button>
       </form>
