@@ -122,7 +122,6 @@ export default function NightSounds() {
     windGain.gain.value = 0.014;
 
     wind.connect(windFilter).connect(windGain).connect(master);
-    wind.start();
 
     // ---- Comet whoosh ----
     const playWhoosh = () => {
@@ -274,17 +273,26 @@ export default function NightSounds() {
       scheduleAligned(callback, firstAtSec, periodSec);
     };
 
-    document
-      .querySelectorAll(".ks-comet")
-      .forEach((el) => scheduleForElement(el, playWhoosh, 1200));
+    // Await resume() before starting any nodes — resume() is async and the
+    // context may still be suspended synchronously after the call returns.
+    (async () => {
+      try { await ctx.resume(); } catch { /* ignore */ }
+      if (alive.aborted || ctx.state !== "running") return;
 
-    const pulseEls = document.querySelectorAll(".ks-pulse");
-    scheduleForElement(pulseEls[0], playThunder, 12880);
-    scheduleForElement(pulseEls[1], playThunder, 17480);
+      wind.start();
 
-    scheduleCricket(3800,  200);
-    scheduleCricket(4500,  900);
-    scheduleCricket(5200, 1700);
+      document
+        .querySelectorAll(".ks-comet")
+        .forEach((el) => scheduleForElement(el, playWhoosh, 1200));
+
+      const pulseEls = document.querySelectorAll(".ks-pulse");
+      scheduleForElement(pulseEls[0], playThunder, 12880);
+      scheduleForElement(pulseEls[1], playThunder, 17480);
+
+      scheduleCricket(3800,  200);
+      scheduleCricket(4500,  900);
+      scheduleCricket(5200, 1700);
+    })();
 
     return () => {
       alive.aborted = true;
