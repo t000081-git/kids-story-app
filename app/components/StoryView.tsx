@@ -143,8 +143,6 @@ export default function StoryView({
   const [isPermanent, setIsPermanent]     = useState(false);
   const [autoNarrate, setAutoNarrate]     = useState(false);
   const [isSavingCloud, setIsSavingCloud] = useState(false);
-  // Triggers the auto-play effect when speech ends on a non-last page
-  const [autoPlayPending, setAutoPlayPending] = useState(false);
 
   // Refs for stale-closure safety inside async speech event callbacks
   const autoNarrateRef  = useRef(false);
@@ -152,6 +150,8 @@ export default function StoryView({
   const totalRef        = useRef(story.pages.length);
   // Always points to the latest handleListen (updated every render)
   const handleListenRef = useRef<() => void>(() => {});
+  // Set to true in utterance.onend (no setState = no re-render = no self-cancel)
+  const autoPlayPendingRef = useRef(false);
 
   useEffect(() => { autoNarrateRef.current = autoNarrate; }, [autoNarrate]);
   useEffect(() => {
@@ -196,16 +196,17 @@ export default function StoryView({
     setHighlight(-1);
   }, [pageIdx]);
 
-  // Auto-narration: when the previous utterance ends on a non-last page,
-  // this effect fires (after React has committed the new pageIdx) and
-  // schedules handleListen via ref so it sees the fresh page content.
+  // Auto-narration: fires whenever pageIdx changes.  If autoPlayPendingRef is
+  // set (meaning the page advance came from utterance.onend, not a tap), we
+  // schedule the next narration.  Using a ref (not state) avoids the
+  // setState→re-render→cleanup→clearTimeout self-cancellation trap.
   useEffect(() => {
-    if (!autoPlayPending) return;
-    setAutoPlayPending(false);
-    const t = setTimeout(() => handleListenRef.current(), 650);
+    if (!autoPlayPendingRef.current) return;
+    autoPlayPendingRef.current = false;
+    const t = setTimeout(() => handleListenRef.current(), 500);
+    // Only cancel if the user manually navigates away before the timer fires
     return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoPlayPending]);
+  }, [pageIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleListen() {
     if (!supported) return;
@@ -231,12 +232,12 @@ export default function StoryView({
     let safetyTimer:  ReturnType<typeof setTimeout>   | null = null;
 
     // ── Karaoke fallback (used on iOS Safari where onboundary never fires) ──
-    // Estimates char position from elapsed time since speech actually started.
-    // ~14.5 chars/s at rate=1.0 is a good fit for most mobile TTS engines.
+    // ~12 chars/s at rate=1.0 matches typical iOS TTS pace well; too high a
+    // value causes highlights to run visibly ahead of the spoken word.
     function startFallback() {
       if (fallbackId) return;               // already running
       const t0         = Date.now();
-      const charsPerMs = (14.5 * utterance.rate) / 1000;
+      const charsPerMs = (12 * utterance.rate) / 1000;
       fallbackId = setInterval(() => {
         if (boundaryFired) { clearInterval(fallbackId!); fallbackId = null; return; }
         setHighlight(Math.min(Math.floor((Date.now() - t0) * charsPerMs), pageText.length - 1));
@@ -264,10 +265,11 @@ export default function StoryView({
 
     utterance.onend = () => {
       cleanup();
-      // Auto-narration: advance to next page and queue play
+      // Auto-narration: set ref BEFORE setPageIdx so the pageIdx effect
+      // sees it as true in the same React flush.
       if (autoNarrateRef.current && pageIdxRef.current < totalRef.current - 1) {
+        autoPlayPendingRef.current = true;
         setPageIdx((p) => p + 1);
-        setAutoPlayPending(true);
       }
     };
     utterance.onerror = cleanup;
