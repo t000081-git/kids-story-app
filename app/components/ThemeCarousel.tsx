@@ -217,22 +217,42 @@ export default function ThemeCarousel({ themes, selected, onSelect, customActive
   );
 }
 
+// Soft marimba-like plink: two sine partials tuned to marimba harmonic ratios.
+// Fundamental stays in the warm mid register (180–380 Hz) so fast spins never
+// produce harsh high-pitched noise. A second partial at 2.76× the fundamental
+// adds the characteristic "hollow wood" warmth without being sharp.
 function playTick(ctx: AudioContext, intensity: number) {
   try {
     const now  = ctx.currentTime;
-    const freq = 520 + intensity * 900;
-    const osc  = ctx.createOscillator();
-    osc.type = "triangle";
-    osc.frequency.setValueAtTime(freq, now);
-    osc.frequency.exponentialRampToValueAtTime(Math.max(80, freq * 0.55), now + 0.04);
+    // Fundamental: 180 Hz (slow spin) → 380 Hz (fast spin) — stays mid-register
+    const fund = 180 + intensity * 200;
+    const vol  = 0.05 + intensity * 0.11; // quieter ceiling than before (max ~0.16)
+    const dur  = 0.10;                    // slightly longer for a softer feel
 
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(Math.min(0.28, 0.06 + intensity * 0.22), now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
+    // ── Fundamental sine ──────────────────────────────────────────────────
+    const osc1  = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = "sine";
+    osc1.frequency.setValueAtTime(fund, now);
+    // Gentle downward pitch-bend gives a natural "struck wood" quality
+    osc1.frequency.exponentialRampToValueAtTime(fund * 0.62, now + dur);
+    gain1.gain.setValueAtTime(vol, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    osc1.connect(gain1).connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + dur + 0.01);
 
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(now);
-    osc.stop(now + 0.07);
+    // ── 2nd partial at 2.76× (marimba harmonic) — lower volume, decays faster
+    const osc2  = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = "sine";
+    osc2.frequency.setValueAtTime(fund * 2.76, now);
+    osc2.frequency.exponentialRampToValueAtTime(fund * 2.76 * 0.58, now + dur * 0.55);
+    gain2.gain.setValueAtTime(vol * 0.22, now);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + dur * 0.55);
+    osc2.connect(gain2).connect(ctx.destination);
+    osc2.start(now);
+    osc2.stop(now + dur * 0.60);
   } catch {
     // AudioContext in bad state — ignore silently
   }

@@ -944,8 +944,8 @@ export default function StoryView({
               </span>
             </label>
 
-            {/* 🇵🇭 Easter egg: lullaby sing mode — only visible when Filipino + auto-narrate */}
-            {language === "tl" && autoNarrate && (
+            {/* Lullaby music toggle — visible for all languages when auto-narrate is on */}
+            {autoNarrate && (
               <label className="flex items-center gap-1.5 cursor-pointer select-none group">
                 <button
                   type="button"
@@ -966,7 +966,7 @@ export default function StoryView({
                   onClick={() => setSing((v) => !v)}
                   className="text-xs text-amber-900/45 group-hover:text-fuchsia-700/80 transition-colors"
                 >
-                  🎵 Awitin
+                  🎵 Lullaby music
                 </span>
               </label>
             )}
