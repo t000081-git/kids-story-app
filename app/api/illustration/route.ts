@@ -25,23 +25,24 @@ const THEME_STYLE: Record<string, string> = {
   "snowy-day": "children sledding on a snowy hill, gentle snowflakes, cozy and warm",
 };
 
-const ALLOWED_THEMES = Object.keys(THEME_STYLE);
-
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const theme = url.searchParams.get("theme") ?? "";
   const text = url.searchParams.get("text") ?? "";
   const seed = url.searchParams.get("seed") ?? "1";
 
-  if (!ALLOWED_THEMES.includes(theme)) {
+  if (!theme || theme.length > 100) {
     return NextResponse.json({ error: "Invalid theme" }, { status: 400 });
   }
   if (!text || text.length > 600) {
     return NextResponse.json({ error: "Invalid text" }, { status: 400 });
   }
 
+  // Use the preset style descriptor when available; fall back to the raw
+  // custom-theme text so user-typed themes still get a real illustration.
+  const themeStyle = THEME_STYLE[theme] ?? theme;
   const summary = text.replace(/\s+/g, " ").trim().slice(0, 180);
-  const prompt = `soft watercolor children's storybook illustration, ${THEME_STYLE[theme]}, ${summary}, warm pastel palette, hand-painted, gentle lighting, cozy, no text, no words, no letters`;
+  const prompt = `soft watercolor children's storybook illustration, ${themeStyle}, ${summary}, warm pastel palette, hand-painted, gentle lighting, cozy, no text, no words, no letters`;
 
   const params = new URLSearchParams({
     width: "768",

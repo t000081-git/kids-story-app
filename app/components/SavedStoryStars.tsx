@@ -143,8 +143,8 @@ export default function SavedStoryStars() {
     >
       {stories.map((story, i) => {
         const pos     = posFor(story, i, wide);
-        const size    = SIZES[Math.min((story.rating || 1) - 1, 4)];
         const isGalaxy = !!story.shareUrl;
+        const size    = Math.round(SIZES[Math.min((story.rating || 1) - 1, 4)] * (isGalaxy ? 1.25 : 1));
         const delay   = rand(story.id, 2) * 3;
         // Stars twinkle fast (2.2–4s); galaxies spin slowly (15–25s)
         const dur     = isGalaxy
