@@ -263,26 +263,42 @@ export default function StoryView({
       {/* ── Story card ────────────────────────────────────────────────────── */}
       <div className="flex-1 min-h-0 relative rounded-2xl border-2 border-amber-900/15 bg-amber-50/80 p-3 sm:p-5 shadow-lg shadow-amber-900/10 flex flex-col overflow-hidden">
 
-        {/* Provenance badge — top-right corner of card, clearly visible */}
+        {/* Provenance ribbon — diagonal bookmark strip in the top-right corner.
+            The wrapper clips the rotated strip at the card's rounded corner.
+            Sits entirely within the corner so it never overlaps title or content. */}
         {loadedSavedInfo && (
           <div
-            className="absolute top-2 right-2.5 text-right pointer-events-none select-none
-                       bg-amber-900/10 rounded-lg px-2 py-1 backdrop-blur-sm
-                       border border-amber-900/10"
+            className="absolute top-0 right-0 w-[88px] h-[88px] overflow-hidden
+                       rounded-tr-2xl pointer-events-none select-none"
             aria-hidden="true"
           >
-            <div className="text-[13px] text-amber-700 leading-tight tracking-wider font-medium">
-              {"★".repeat(loadedSavedInfo.rating)}
-              <span className="text-amber-900/25">{"★".repeat(5 - loadedSavedInfo.rating)}</span>
+            <div
+              className="absolute bg-red-700 text-white text-center
+                         shadow-[0_2px_8px_rgba(0,0,0,0.28)]"
+              style={{
+                width: "120px",
+                top: "19px",
+                right: "-32px",
+                transform: "rotate(45deg)",
+                padding: "5px 0 6px",
+              }}
+            >
+              {/* Rating stars */}
+              <p className="text-[11px] font-semibold leading-none tracking-wide">
+                {"★".repeat(loadedSavedInfo.rating)}
+                <span className="opacity-30">{"★".repeat(5 - loadedSavedInfo.rating)}</span>
+              </p>
+              {/* Save date */}
+              <p className="text-[8px] opacity-90 font-mono mt-[3px] leading-none">
+                {new Date(loadedSavedInfo.savedAt).toLocaleDateString()}
+              </p>
+              {/* Browser · OS */}
+              {loadedSavedInfo.userAgent && (
+                <p className="text-[7px] opacity-65 font-mono mt-[2px] leading-none">
+                  {parseBrowser(loadedSavedInfo.userAgent)}
+                </p>
+              )}
             </div>
-            <div className="text-[10px] text-amber-800/90 font-mono mt-0.5">
-              {new Date(loadedSavedInfo.savedAt).toLocaleDateString()}
-            </div>
-            {loadedSavedInfo.userAgent && (
-              <div className="text-[9px] text-amber-700/75 font-mono max-w-[110px] truncate mt-0.5">
-                {parseBrowser(loadedSavedInfo.userAgent)} · {parseOS(loadedSavedInfo.userAgent)}
-              </div>
-            )}
           </div>
         )}
 
