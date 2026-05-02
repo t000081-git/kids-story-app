@@ -19,8 +19,11 @@ const VOICE_GRANDMA_ARABIC  = "fhJPNMe92P5iPjL1reZT"; // Grandma Arabic
 
 const ALL_VOICES = [VOICE_ADVENTURE_MALE, VOICE_GENTLE_FEMALE, VOICE_GRANDMA_ARABIC];
 
-function pickVoice(language: string, theme: string): string {
-  if (language === "tl") return ALL_VOICES[Math.floor(Math.random() * ALL_VOICES.length)];
+function pickVoice(language: string, theme: string, voiceIdx?: number): string {
+  if (language === "tl") {
+    const idx = typeof voiceIdx === "number" ? voiceIdx % ALL_VOICES.length : Math.floor(Math.random() * ALL_VOICES.length);
+    return ALL_VOICES[idx];
+  }
   if (language === "ar") return VOICE_GRANDMA_ARABIC;
   return ADVENTURE_THEMES.has(theme) ? VOICE_ADVENTURE_MALE : VOICE_GENTLE_FEMALE;
 }
@@ -31,7 +34,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "ElevenLabs not configured" }, { status: 503 });
   }
 
-  let body: { text?: unknown; language?: unknown; theme?: unknown; sing?: unknown };
+  let body: { text?: unknown; language?: unknown; theme?: unknown; sing?: unknown; voiceIdx?: unknown };
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Bad request" }, { status: 400 }); }
 
@@ -43,7 +46,8 @@ export async function POST(req: Request) {
   const language = typeof body.language === "string" ? body.language : "en";
   const theme    = typeof body.theme    === "string" ? body.theme    : "";
   const sing     = body.sing === true;
-  const voiceId  = process.env.ELEVENLABS_VOICE_ID ?? pickVoice(language, theme);
+  const voiceIdx = typeof body.voiceIdx === "number" ? body.voiceIdx : undefined;
+  const voiceId  = process.env.ELEVENLABS_VOICE_ID ?? pickVoice(language, theme, voiceIdx);
 
   const voiceSettings = sing ? {
     stability:        0.25,

@@ -253,7 +253,7 @@ export default function StoryForm({
         >
           {/* Dim when no valid name; brighten when ready — smooth opacity shift */}
           <div
-            className="relative w-[76px] h-[82px] sm:w-[110px] sm:h-[118px] transition-[opacity,filter] duration-500"
+            className="relative w-[101px] h-[109px] sm:w-[146px] sm:h-[157px] transition-[opacity,filter] duration-500"
             style={{
               opacity: nameValid ? 1 : 0.42,
               filter:  nameValid
@@ -264,7 +264,7 @@ export default function StoryForm({
             {/* Moon emoji */}
             <span
               className="absolute top-0 left-0 right-0 text-center leading-none select-none
-                         text-[58px] sm:text-[84px]
+                         text-[77px] sm:text-[112px]
                          group-hover:drop-shadow-[0_0_32px_rgba(255,215,80,0.95)]"
               style={{
                 animation: "ks-float 8s ease-in-out infinite, ks-glow 6s ease-in-out infinite",
@@ -272,22 +272,21 @@ export default function StoryForm({
             >
               🌙
             </span>
-            {/* "tell me a story" — curved along the outer bottom arc of the crescent.
-                Path uses the same viewBox as the container so it scales with the
-                responsive container size; y ≈ 78 sits right at the crescent body. */}
+            {/* "tell me a story" — curved along the crescent body itself.
+                Path sits at y≈66–78, placing text on the lower body of the crescent. */}
             <svg
               viewBox="0 0 110 118"
               className="absolute inset-0 w-full h-full pointer-events-none"
               aria-hidden="true"
             >
               <defs>
-                <path id="ks-moon-cta" d="M 8,78 Q 55,96 102,78" fill="none" />
+                <path id="ks-moon-cta" d="M 14,66 Q 55,80 96,66" fill="none" />
               </defs>
               <text style={{
                 fill: "rgba(255,232,160,0.95)",
-                fontSize: "9px",
+                fontSize: "8.5px",
                 fontWeight: "700",
-                letterSpacing: "1.4px",
+                letterSpacing: "1.2px",
               }}>
                 <textPath href="#ks-moon-cta" startOffset="50%" textAnchor="middle">
                   {isLoading ? "writing…" : "tell me a story"}

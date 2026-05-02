@@ -189,6 +189,10 @@ export default function StoryView({
   const [isSavingCloud, setIsSavingCloud] = useState(false);
   const [isFetching,   setIsFetching]    = useState(false); // loading EL audio
 
+  // Stable voice index for Tagalog — picked once per story session so all
+  // pages use the same narrator voice rather than changing page-to-page.
+  const sessionVoiceIdxRef = useRef(Math.floor(Math.random() * 3));
+
   // Refs for stale-closure safety inside async speech event callbacks
   const autoNarrateRef  = useRef(false);
   const singRef         = useRef(false);
@@ -230,9 +234,7 @@ export default function StoryView({
     melodyScheduledUntilRef.current = 0;
   }, [sing]);
 
-  // Lullaby melody: paused for now — ElevenLabs TTS can't truly sing,
-  // so the kalimba background is on hold until a better solution is explored.
-  // Fade-out-only kept so any residual gain is cleaned up if toggled.
+  // Lullaby melody — plays as background music while sing mode is active.
   useEffect(() => {
     if (!sing || !isPlaying) {
       const g = melodyGainRef.current;
@@ -241,6 +243,29 @@ export default function StoryView({
       g.gain.cancelScheduledValues(t);
       g.gain.setValueAtTime(Math.max(0, g.gain.value), t);
       g.gain.linearRampToValueAtTime(0, t + 0.4);
+      return;
+    }
+
+    const ctx = audioCtxRef.current;
+    if (!ctx || ctx.state === "closed") return;
+
+    // Create gain node if needed (or if context was recreated)
+    if (!melodyGainRef.current || melodyGainRef.current.context !== ctx) {
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      g.connect(ctx.destination);
+      melodyGainRef.current = g;
+    }
+    const g   = melodyGainRef.current;
+    const now = ctx.currentTime;
+
+    g.gain.cancelScheduledValues(now);
+    g.gain.setValueAtTime(g.gain.value, now);
+    g.gain.linearRampToValueAtTime(0.65, now + 1.0);
+
+    if (melodyScheduledUntilRef.current <= now + 0.1) {
+      scheduleMelody(ctx, g, now, 4);
+      melodyScheduledUntilRef.current = now + 4 * LOOP_DUR;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sing, isPlaying]);
@@ -442,7 +467,7 @@ export default function StoryView({
         fetch("/api/narrate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: nextText, language, theme, sing: nextSing }),
+          body: JSON.stringify({ text: nextText, language, theme, sing: nextSing, voiceIdx: sessionVoiceIdxRef.current }),
         })
           .then((r) => r.ok ? r.json() : Promise.reject())
           .then((data: { audioBase64: string; alignment: ELAlignment }) => {
@@ -576,7 +601,7 @@ export default function StoryView({
       const res = await fetch("/api/narrate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: pageText, language, theme, sing }),
+        body: JSON.stringify({ text: pageText, language, theme, sing, voiceIdx: sessionVoiceIdxRef.current }),
         signal: abort.signal,
       });
 
@@ -781,8 +806,8 @@ export default function StoryView({
           </AnimatePresence>
         </div>
 
-        {/* ── Rating + save (last page only) ── */}
-        {isLast && (
+        {/* ── Rating + save (last page only, not when replaying a saved story) ── */}
+        {isLast && !loadedSavedInfo && (
           <div className="flex-shrink-0 mt-1 border-t border-amber-900/10 bg-amber-950/12 rounded-xl mx-[-0.25rem] px-3 pt-2 pb-1.5 flex flex-col items-center gap-1">
             {!savedEntry ? (
               /* Not yet saved — show stars */
