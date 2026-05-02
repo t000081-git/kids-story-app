@@ -151,9 +151,15 @@ export default function StoryView({
   // Always points to the latest handleListen (updated every render)
   const handleListenRef = useRef<() => void>(() => {});
   // Set to true in utterance.onend (no setState = no re-render = no self-cancel)
-  const autoPlayPendingRef = useRef(false);
+  const autoPlayPendingRef   = useRef(false);
+  // Adaptive karaoke: measure actual chars/ms from previous page to calibrate next page
+  const calibratedRateRef    = useRef<number | null>(null);
+  const speechStartTimeRef   = useRef<number | null>(null);
+  // Tracks current imageLoaded state without stale closure in the auto-play effect
+  const imageLoadedRef       = useRef(false);
 
-  useEffect(() => { autoNarrateRef.current = autoNarrate; }, [autoNarrate]);
+  useEffect(() => { autoNarrateRef.current  = autoNarrate;   }, [autoNarrate]);
+  useEffect(() => { imageLoadedRef.current  = imageLoaded;   }, [imageLoaded]);
   useEffect(() => {
     pageIdxRef.current = pageIdx;
     totalRef.current   = story.pages.length;
@@ -192,20 +198,39 @@ export default function StoryView({
     window.speechSynthesis?.cancel();
     setIsPlaying(false);
     setImageLoaded(false);
+    imageLoadedRef.current = false; // reset synchronously so auto-play effect sees false
     setImageError(false);
     setHighlight(-1);
   }, [pageIdx]);
 
   // Auto-narration: fires whenever pageIdx changes.  If autoPlayPendingRef is
   // set (meaning the page advance came from utterance.onend, not a tap), we
-  // schedule the next narration.  Using a ref (not state) avoids the
-  // setState→re-render→cleanup→clearTimeout self-cancellation trap.
+  // wait for the illustration to load before starting narration.
+  // Polls imageLoadedRef every 150ms; starts after image loads OR after 4s
+  // (whichever comes first) so the reader always hears the full story.
   useEffect(() => {
     if (!autoPlayPendingRef.current) return;
     autoPlayPendingRef.current = false;
-    const t = setTimeout(() => handleListenRef.current(), 500);
-    // Only cancel if the user manually navigates away before the timer fires
-    return () => clearTimeout(t);
+    let tid: ReturnType<typeof setTimeout>   | null = null;
+    let iid: ReturnType<typeof setInterval>  | null = null;
+
+    function beginNarration() {
+      if (iid) { clearInterval(iid); iid = null; }
+      // Small buffer (400ms) so the new page text animation settles first
+      tid = setTimeout(() => handleListenRef.current(), 400);
+    }
+
+    if (imageLoadedRef.current) {
+      beginNarration();
+    } else {
+      const deadline = Date.now() + 4000; // max 4s wait for illustration
+      iid = setInterval(() => {
+        if (imageLoadedRef.current || Date.now() >= deadline) beginNarration();
+      }, 150);
+    }
+
+    // Only cancel if the user manually navigates away before narration starts
+    return () => { if (tid) clearTimeout(tid); if (iid) clearInterval(iid); };
   }, [pageIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleListen() {
@@ -230,18 +255,14 @@ export default function StoryView({
     let boundaryFired = false;
     const wordTimers: ReturnType<typeof setTimeout>[] = [];
     let safetyTimer:  ReturnType<typeof setTimeout>   | null = null;
-    let startupTimer: ReturnType<typeof setTimeout>   | null = null;
 
     // ── Karaoke fallback (iOS Safari: onboundary never fires) ──────────────
-    // Schedule one setTimeout per word at its estimated start time rather
-    // than polling with setInterval — gives smoother word-level sync with
-    // no drift between ticks.
-    // ~12 chars/s is a conservative rate for typical iOS TTS at rate=0.95;
-    // iOS also has a ~200ms "synthesis buffer" before audio actually plays
-    // after onstart fires, so we delay the whole word-schedule by 200ms.
+    // Schedule one setTimeout per word at its estimated start time.
+    // Uses the measured chars/ms from the previous page (calibratedRateRef)
+    // so accuracy improves after page 1.  Falls back to 13 chars/s for p.1.
     function startFallback() {
-      if (wordTimers.length > 0) return;         // already scheduled
-      const charsPerMs = (12 * utterance.rate) / 1000;
+      if (wordTimers.length > 0) return; // already scheduled
+      const charsPerMs = calibratedRateRef.current ?? (13 * utterance.rate / 1000);
       wordSegments.forEach(({ start }) => {
         wordTimers.push(
           setTimeout(() => {
@@ -251,11 +272,12 @@ export default function StoryView({
       });
     }
 
-    // onstart = speech engine is ready; wait 200ms for iOS audio buffer
-    // before scheduling word highlights.
+    // onstart fires the moment iOS audio begins playing — start immediately,
+    // no startup delay needed.
     utterance.onstart = () => {
       if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = null; }
-      startupTimer = setTimeout(startFallback, 200);
+      speechStartTimeRef.current = Date.now(); // record actual speech start
+      startFallback();
     };
     // Safety net: start 600ms after speak() in case onstart never fires.
     safetyTimer = setTimeout(startFallback, 600);
@@ -266,7 +288,6 @@ export default function StoryView({
 
     function cleanup() {
       if (safetyTimer)  clearTimeout(safetyTimer);
-      if (startupTimer) clearTimeout(startupTimer);
       wordTimers.forEach(clearTimeout);
       wordTimers.length = 0;
       setIsPlaying(false);
@@ -274,6 +295,14 @@ export default function StoryView({
     }
 
     utterance.onend = () => {
+      // Measure actual speech duration → calibrate chars/ms for next page
+      if (speechStartTimeRef.current !== null) {
+        const elapsed = Date.now() - speechStartTimeRef.current;
+        if (elapsed > 500 && pageText.length > 10) {
+          calibratedRateRef.current = pageText.length / elapsed;
+        }
+        speechStartTimeRef.current = null;
+      }
       cleanup();
       // Auto-narration: set ref BEFORE setPageIdx so the pageIdx effect
       // sees it as true in the same React flush.
