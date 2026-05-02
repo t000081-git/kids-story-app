@@ -236,14 +236,25 @@ export default function StoryView({
 
   // Lullaby melody — plays as background music while sing mode is active.
   // Uses a setInterval keepalive so the music never stops mid-story.
+  //
+  // Double-layer prevention: the ref is cleared to null on every disable
+  // so re-enabling always creates a FRESH GainNode. Previously-scheduled
+  // oscillators remain connected to the old (silenced) node and never
+  // re-activate — they just run at gain=0 until their scheduled stop time.
   useEffect(() => {
     if (!sing || !isPlaying) {
+      // Pull the ref out and clear it FIRST — any subsequent enable will see
+      // null and create a new GainNode, orphaning the old oscillators.
       const g = melodyGainRef.current;
+      melodyGainRef.current = null;
+      melodyScheduledUntilRef.current = 0;
       if (!g || g.context.state === "closed") return;
+      // Short fade-out (200 ms) then leave the old node at gain=0.
+      // Old oscillators silently run to their scheduled stop times and get GC'd.
       const t = g.context.currentTime;
       g.gain.cancelScheduledValues(t);
       g.gain.setValueAtTime(Math.max(0, g.gain.value), t);
-      g.gain.linearRampToValueAtTime(0, t + 0.4);
+      g.gain.linearRampToValueAtTime(0, t + 0.2);
       return;
     }
 
@@ -253,30 +264,24 @@ export default function StoryView({
     const style   = getMelodyStyle(theme);
     const loopDur = getMelodyLoopDur(style);
 
-    // Create gain node if needed (or if context was recreated)
-    if (!melodyGainRef.current || melodyGainRef.current.context !== ctx) {
-      const g = ctx.createGain();
-      g.gain.value = 0;
-      g.connect(ctx.destination);
-      melodyGainRef.current = g;
-    }
-    const g   = melodyGainRef.current;
-    const now = ctx.currentTime;
+    // Always create a fresh GainNode — ref is null after any disable,
+    // so old oscillators can never play again through this new node.
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    g.connect(ctx.destination);
+    melodyGainRef.current = g;
 
-    g.gain.cancelScheduledValues(now);
-    g.gain.setValueAtTime(g.gain.value, now);
+    const now = ctx.currentTime;
     g.gain.linearRampToValueAtTime(0.65, now + 1.0);
 
     // Initial burst: schedule 3 loops ahead
-    if (melodyScheduledUntilRef.current <= now + 0.1) {
-      scheduleMelody(ctx, g, now, 3, style);
-      melodyScheduledUntilRef.current = now + 3 * loopDur;
-    }
+    scheduleMelody(ctx, g, now, 3, style);
+    melodyScheduledUntilRef.current = now + 3 * loopDur;
 
     // Keepalive: every ~8 s check if we're within 20 s of running out;
     // if so, schedule 3 more loops. This keeps music going indefinitely.
     const iv = setInterval(() => {
-      const c = audioCtxRef.current;
+      const c  = audioCtxRef.current;
       const gn = melodyGainRef.current;
       if (!c || c.state === "closed" || !gn) return;
       const t2 = c.currentTime;
