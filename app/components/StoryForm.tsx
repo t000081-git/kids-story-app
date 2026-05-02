@@ -245,38 +245,47 @@ export default function StoryForm({
         <button
           type="submit"
           disabled={isLoading || !nameValid || !customValid}
-          className="fixed z-10 focus:outline-none group disabled:opacity-40 disabled:cursor-not-allowed"
+          className="fixed z-10 focus:outline-none group disabled:cursor-not-allowed"
           style={{ right: "7%", top: "5%" }}
           aria-label={isLoading ? "Writing your story…" : "Tell me a story"}
         >
-          <div className="relative" style={{ width: 110, height: 118 }}>
-            {/* Moon emoji — same animation as the old decorative moon */}
+          {/* Dim when no valid name; brighten when ready — smooth opacity shift */}
+          <div
+            className="relative w-[76px] h-[82px] sm:w-[110px] sm:h-[118px] transition-[opacity,filter] duration-500"
+            style={{
+              opacity: nameValid ? 1 : 0.42,
+              filter:  nameValid
+                ? "drop-shadow(0 0 22px rgba(255,215,80,0.70)) saturate(1.2)"
+                : "drop-shadow(0 0 6px rgba(255,200,80,0.15)) saturate(0.5)",
+            }}
+          >
+            {/* Moon emoji */}
             <span
               className="absolute top-0 left-0 right-0 text-center leading-none select-none
-                         transition-[filter] duration-200
+                         text-[58px] sm:text-[84px]
                          group-hover:drop-shadow-[0_0_32px_rgba(255,215,80,0.95)]"
               style={{
-                fontSize: 84,
-                filter: "drop-shadow(0 0 18px rgba(255,200,80,0.45))",
                 animation: "ks-float 8s ease-in-out infinite, ks-glow 6s ease-in-out infinite",
               }}
             >
               🌙
             </span>
-            {/* "tell me a story" curved along the bottom arc of the crescent */}
+            {/* "tell me a story" — curved along the outer bottom arc of the crescent.
+                Path uses the same viewBox as the container so it scales with the
+                responsive container size; y ≈ 78 sits right at the crescent body. */}
             <svg
               viewBox="0 0 110 118"
               className="absolute inset-0 w-full h-full pointer-events-none"
               aria-hidden="true"
             >
               <defs>
-                <path id="ks-moon-cta" d="M 8,96 Q 55,116 102,96" fill="none" />
+                <path id="ks-moon-cta" d="M 8,78 Q 55,96 102,78" fill="none" />
               </defs>
               <text style={{
                 fill: "rgba(255,232,160,0.95)",
-                fontSize: "9.5px",
+                fontSize: "9px",
                 fontWeight: "700",
-                letterSpacing: "1.8px",
+                letterSpacing: "1.4px",
               }}>
                 <textPath href="#ks-moon-cta" startOffset="50%" textAnchor="middle">
                   {isLoading ? "writing…" : "tell me a story"}

@@ -53,22 +53,23 @@ const SIZES = [14, 18, 24, 30, 38];
 type Zone = { x0: number; x1: number; y0: number; y1: number };
 
 function getZones(wide: boolean): Zone[] {
-  // Shared top/bottom bands (full width)
-  const top:          Zone = { x0:  2, x1: 98,  y0:  2, y1: 14 };
-  const bottom:       Zone = { x0:  2, x1: 98,  y0: 86, y1: 98 };
+  const bottom: Zone = { x0:  2, x1: 98, y0: 86, y1: 98 };
 
-  // Mobile: bias heavily toward the top strip, bottom comes late
-  if (!wide) return [top, top, top, top, bottom, bottom];
+  // Mobile: moon occupies roughly x 62–93%, y 4–18% (fixed, top-right).
+  // Limit the top strip to the left 60% so stars never land behind the moon.
+  if (!wide) {
+    const top: Zone = { x0: 2, x1: 60, y0: 2, y1: 14 };
+    return [top, top, top, top, bottom, bottom];
+  }
 
-  // Desktop: split left/right margins into upper and lower halves so we fill
-  // upper-left/upper-right before anything lands in the lower margins or bottom.
-  const leftUpper:    Zone = { x0:  0, x1: 21,  y0: 15, y1: 47 };
-  const rightUpper:   Zone = { x0: 79, x1: 100, y0: 15, y1: 47 };
-  const leftLower:    Zone = { x0:  0, x1: 21,  y0: 53, y1: 85 };
-  const rightLower:   Zone = { x0: 79, x1: 100, y0: 53, y1: 85 };
+  // Desktop: moon occupies roughly x 82–93%, y 4–16%.
+  // Top strip is limited to x ≤ 80; rightUpper starts below the moon (y ≥ 18).
+  const top:        Zone = { x0:  2, x1: 80,  y0:  2, y1: 14 };
+  const leftUpper:  Zone = { x0:  0, x1: 21,  y0: 15, y1: 47 };
+  const rightUpper: Zone = { x0: 79, x1: 100, y0: 18, y1: 47 };
+  const leftLower:  Zone = { x0:  0, x1: 21,  y0: 53, y1: 85 };
+  const rightLower: Zone = { x0: 79, x1: 100, y0: 53, y1: 85 };
 
-  // Cycle order: top → upper-left → upper-right → top (again) →
-  //              lower-left → lower-right → bottom → repeat
   return [top, leftUpper, rightUpper, top, leftLower, rightLower, bottom];
 }
 
