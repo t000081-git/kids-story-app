@@ -273,11 +273,10 @@ export default function NightSounds() {
       scheduleAligned(callback, firstAtSec, periodSec);
     };
 
-    // Await resume() before starting any nodes — resume() is async and the
-    // context may still be suspended synchronously after the call returns.
-    (async () => {
-      try { await ctx.resume(); } catch { /* ignore */ }
-      if (alive.aborted || ctx.state !== "running") return;
+    // resume() is async — chain directly off the Promise so audio starts
+    // as soon as Chrome grants the activation, with no state-string check.
+    ctx.resume().then(() => {
+      if (alive.aborted) return;
 
       wind.start();
 
@@ -292,7 +291,7 @@ export default function NightSounds() {
       scheduleCricket(3800,  200);
       scheduleCricket(4500,  900);
       scheduleCricket(5200, 1700);
-    })();
+    }).catch(() => {});
 
     return () => {
       alive.aborted = true;
