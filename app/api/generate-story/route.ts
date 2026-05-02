@@ -141,10 +141,11 @@ You MUST respond with ONLY a valid JSON object in this exact format, with no add
 {
   "title": "Story title in ${langName}",
   "pages": [
-${Array.from({ length: pageCount }, (_, i) => `    "Page ${i + 1} text in ${langName}..."`).join(",\n")}
+${Array.from({ length: pageCount }, () => `    "Story text here — do NOT include a 'Page N:' prefix"`).join(",\n")}
   ]
 }
 
+IMPORTANT: Each page string must contain ONLY the story prose — never start a page with "Page 1:", "Page 2:", or any page label.
 The "pages" array MUST contain exactly ${pageCount} string entries.`;
 }
 
@@ -234,7 +235,12 @@ async function tryGenerate(
       throw new Error("invalid shape");
     }
 
-    return { title: parsed.title.trim(), pages: parsed.pages as string[] };
+    // Strip any "Page N:" / "Page N." / "Page N -" prefixes the LLM may still
+    // emit despite the prompt instruction (belt-and-suspenders).
+    const pages = (parsed.pages as string[]).map((p) =>
+      p.trim().replace(/^[Pp]age\s*\d+\s*[:.\-–—]\s*/u, ""),
+    );
+    return { title: parsed.title.trim(), pages };
   } finally {
     clearTimeout(abortTimer);
   }
