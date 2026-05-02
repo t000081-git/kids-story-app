@@ -223,24 +223,32 @@ export default function StoryForm({
         {/* Language — compact flag icons only */}
         <div className="flex items-center gap-2 justify-end">
           <span className="text-xs text-amber-50/50 mr-1">Language:</span>
-          {([["en", "🇬🇧"], ["ar", "🇸🇦🇰🇼"], ["tl", "🇵🇭"]] as [Language, string][]).map(([lang, flag]) => (
-            <button
-              key={lang}
-              type="button"
-              onClick={() => setLanguage(lang)}
-              disabled={isLoading}
-              aria-label={lang === "en" ? "English" : lang === "ar" ? "Arabic" : "Filipino"}
-              aria-pressed={language === lang}
-              className={
-                "h-10 rounded-full border-2 flex items-center justify-center transition-colors disabled:opacity-50 " +
-                (lang === "ar" ? "px-2 gap-0.5 text-base " : "w-10 text-xl ") +
-                (language === lang
-                  ? "border-amber-200 bg-amber-100/15 shadow-[0_0_12px_rgba(252,211,77,0.3)]"
-                  : "border-amber-100/20 bg-white/5 hover:bg-white/10")
-              }
-            >
-              {flag}
-            </button>
+          {([["en", "🇬🇧", "English"], ["ar", "🇸🇦🇰🇼", "Arabic"], ["tl", "🇵🇭", "Tagalog"]] as [Language, string, string][]).map(([lang, flag, label]) => (
+            <div key={lang} className="relative group/flag">
+              <button
+                type="button"
+                onClick={() => setLanguage(lang)}
+                disabled={isLoading}
+                aria-label={label}
+                aria-pressed={language === lang}
+                className={
+                  "h-10 rounded-full border-2 flex items-center justify-center transition-colors disabled:opacity-50 " +
+                  (lang === "ar" ? "px-2 gap-0.5 text-base " : "w-10 text-xl ") +
+                  (language === lang
+                    ? "border-amber-200 bg-amber-100/15 shadow-[0_0_12px_rgba(252,211,77,0.3)]"
+                    : "border-amber-100/20 bg-white/5 hover:bg-white/10")
+                }
+              >
+                {flag}
+              </button>
+              {/* Tooltip */}
+              <span
+                className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 whitespace-nowrap rounded-md bg-[rgba(10,6,38,0.88)] px-2 py-1 text-xs text-amber-100 opacity-0 group-hover/flag:opacity-100 transition-opacity duration-150 backdrop-blur-sm shadow-md"
+                aria-hidden="true"
+              >
+                {label}
+              </span>
+            </div>
           ))}
         </div>
 

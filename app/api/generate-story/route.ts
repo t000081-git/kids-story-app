@@ -111,8 +111,18 @@ const PRESET_PROMPT: Record<string, string> = {
 };
 
 function buildSystemPrompt(pageCount: number, language: Language): string {
-  if (language === "tl") return buildLullabyPrompt(pageCount);
   const langName = LANGUAGE_NAME[language];
+
+  const tagalogExtra = language === "tl" ? `
+
+TAGALOG LANGUAGE RULES — strictly follow these:
+- Write in authentic, natural Filipino/Tagalog throughout — NOT Taglish or English-heavy text.
+- Use real, existing Tagalog words. Do NOT invent or hallucinate Tagalog-sounding words.
+- Prefer native Tagalog vocabulary over borrowed English words wherever a native word exists. Examples: use "araw" not "sun", "gabi" not "night", "ulap" not "cloud", "ilog" not "river", "puno" not "tree", "tahimik" not "quiet", "maganda" not "beautiful", "malakas" not "strong", "mabilis" not "fast".
+- English loanwords that have no Tagalog equivalent (e.g. proper names, brand-new concepts) are allowed, but native Tagalog words are always preferred.
+- Follow natural Tagalog sentence structure (verb-subject-object or verb-focus pattern is common).
+- The child's name should remain spelled exactly as given — do not translate or alter it.` : "";
+
   return `You are a warm, gentle storyteller who writes magical bedtime stories for young children (ages 4-8).
 
 Each story must:
@@ -124,7 +134,7 @@ Each story must:
 - End on a warm, hopeful note
 - Each page should be 2-4 short sentences (about 30-60 words)
 
-Write the entire story (both the title AND every page) in ${langName}. The child's name should remain spelled exactly as given by the user, even when the rest of the text is in ${langName}.
+Write the entire story (both the title AND every page) in ${langName}. The child's name should remain spelled exactly as given by the user, even when the rest of the text is in ${langName}.${tagalogExtra}
 
 You MUST respond with ONLY a valid JSON object in this exact format, with no additional text before or after:
 {
