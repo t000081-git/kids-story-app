@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { Language, LoadedSavedInfo, Story, Theme } from "./StoryApp";
 import type { SavedStory, ShareableStory } from "@/lib/saved-stories";
@@ -141,6 +141,23 @@ export default function StoryView({
   const [savedEntry, setSavedEntry]       = useState<SavedStory | null>(null);
   const [copied, setCopied]               = useState(false);
   const [isPermanent, setIsPermanent]     = useState(false);
+  const [autoNarrate, setAutoNarrate]     = useState(false);
+  const [isSavingCloud, setIsSavingCloud] = useState(false);
+  // Triggers the auto-play effect when speech ends on a non-last page
+  const [autoPlayPending, setAutoPlayPending] = useState(false);
+
+  // Refs for stale-closure safety inside async speech event callbacks
+  const autoNarrateRef  = useRef(false);
+  const pageIdxRef      = useRef(pageIdx);
+  const totalRef        = useRef(story.pages.length);
+  // Always points to the latest handleListen (updated every render)
+  const handleListenRef = useRef<() => void>(() => {});
+
+  useEffect(() => { autoNarrateRef.current = autoNarrate; }, [autoNarrate]);
+  useEffect(() => {
+    pageIdxRef.current = pageIdx;
+    totalRef.current   = total;
+  }, [pageIdx, total]);
 
   const prefersReduced = useReducedMotion();
 
@@ -179,6 +196,17 @@ export default function StoryView({
     setHighlight(-1);
   }, [pageIdx]);
 
+  // Auto-narration: when the previous utterance ends on a non-last page,
+  // this effect fires (after React has committed the new pageIdx) and
+  // schedules handleListen via ref so it sees the fresh page content.
+  useEffect(() => {
+    if (!autoPlayPending) return;
+    setAutoPlayPending(false);
+    const t = setTimeout(() => handleListenRef.current(), 650);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPlayPending]);
+
   function handleListen() {
     if (!supported) return;
     if (isPlaying) {
@@ -197,34 +225,60 @@ export default function StoryView({
     const voice = pickBestVoice(voices, language);
     if (voice) { utterance.voice = voice; utterance.lang = voice.lang || LANG_BCP47[language]; }
 
-    const pageText = story.pages[pageIdx];
+    const pageText    = story.pages[pageIdx];
     let boundaryFired = false;
-    let fallbackId: ReturnType<typeof setInterval> | null = null;
+    let fallbackId:   ReturnType<typeof setInterval>  | null = null;
+    let safetyTimer:  ReturnType<typeof setTimeout>   | null = null;
 
-    const gracePeriod = setTimeout(() => {
-      const startTime  = Date.now();
-      const charsPerMs = (13 * utterance.rate) / 1000;
+    // ── Karaoke fallback (used on iOS Safari where onboundary never fires) ──
+    // Estimates char position from elapsed time since speech actually started.
+    // ~14.5 chars/s at rate=1.0 is a good fit for most mobile TTS engines.
+    function startFallback() {
+      if (fallbackId) return;               // already running
+      const t0         = Date.now();
+      const charsPerMs = (14.5 * utterance.rate) / 1000;
       fallbackId = setInterval(() => {
         if (boundaryFired) { clearInterval(fallbackId!); fallbackId = null; return; }
-        setHighlight(Math.min(Math.floor((Date.now() - startTime) * charsPerMs), pageText.length - 1));
-      }, 80);
-    }, 300);
+        setHighlight(Math.min(Math.floor((Date.now() - t0) * charsPerMs), pageText.length - 1));
+      }, 60);
+    }
+
+    // onstart fires when speech actually begins → most accurate start time.
+    utterance.onstart = () => {
+      if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = null; }
+      startFallback();
+    };
+    // Safety net: if onstart never fires (some browsers/devices), start after 400 ms.
+    safetyTimer = setTimeout(startFallback, 400);
 
     utterance.onboundary = (e: SpeechSynthesisEvent) => {
       if (e.name === "word" || e.name === "sentence") { boundaryFired = true; setHighlight(e.charIndex); }
     };
+
     function cleanup() {
-      clearTimeout(gracePeriod);
-      if (fallbackId) clearInterval(fallbackId);
+      if (safetyTimer) clearTimeout(safetyTimer);
+      if (fallbackId)  clearInterval(fallbackId);
       setIsPlaying(false);
       setHighlight(-1);
     }
-    utterance.onend   = cleanup;
+
+    utterance.onend = () => {
+      cleanup();
+      // Auto-narration: advance to next page and queue play
+      if (autoNarrateRef.current && pageIdxRef.current < totalRef.current - 1) {
+        setPageIdx((p) => p + 1);
+        setAutoPlayPending(true);
+      }
+    };
     utterance.onerror = cleanup;
 
     window.speechSynthesis.speak(utterance);
     setIsPlaying(true);
   }
+
+  // Keep the ref current so the autoPlayPending effect always calls the
+  // freshest version of handleListen (with the right pageIdx in closure).
+  handleListenRef.current = handleListen;
 
   function handleSave() {
     if (!onSave || rating === 0) return;
@@ -239,20 +293,32 @@ export default function StoryView({
     setSavedEntry(entry);
   }
 
-  function handleGetPermanentLink() {
-    if (!savedEntry) return;
-    const shareable: ShareableStory = {
-      title: story.title, pages: story.pages, theme, language,
-    };
-    const url = buildShareUrl(shareable);
-    // Mark this saved story as having a permanent link
-    updateSavedStory(savedEntry.id, { shareUrl: url });
-    window.dispatchEvent(new CustomEvent("ks-stories-updated"));
-    setIsPermanent(true);
-    navigator.clipboard?.writeText(url).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    });
+  /** Save story to Vercel KV → get short URL → turn local star into galaxy. */
+  async function handleCloudSave() {
+    if (!savedEntry || isSavingCloud || isPermanent) return;
+    setIsSavingCloud(true);
+    try {
+      const res = await fetch("/api/stories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: story.title, pages: story.pages, theme, language }),
+      });
+      if (!res.ok) throw new Error("save failed");
+      const { url } = (await res.json()) as { id: string; url: string };
+      const fullUrl = `${window.location.origin}${url}`;
+      // Update localStorage entry: shareUrl → cloud URL, which turns star → galaxy
+      updateSavedStory(savedEntry.id, { shareUrl: fullUrl });
+      window.dispatchEvent(new CustomEvent("ks-stories-updated"));
+      setIsPermanent(true);
+      navigator.clipboard?.writeText(fullUrl).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2500);
+      });
+    } catch {
+      // Silent fail — button stays clickable so user can retry
+    } finally {
+      setIsSavingCloud(false);
+    }
   }
 
   return (
@@ -445,38 +511,64 @@ export default function StoryView({
                   >
                     {copied && !isPermanent ? "✓ Copied!" : "🔗 Share"}
                   </button>
-                  {/* Permanent link — saves shareUrl to localStorage → becomes galaxy star */}
+                  {/* Cloud save → short URL → local star becomes a galaxy */}
                   <button
-                    onClick={handleGetPermanentLink}
-                    className={`text-xs rounded-full border px-3 py-0.5 transition-colors
+                    onClick={handleCloudSave}
+                    disabled={isSavingCloud || isPermanent}
+                    className={`text-xs rounded-full border px-3 py-0.5 transition-colors disabled:cursor-default
                                 ${isPermanent
                                   ? "border-violet-400/50 text-violet-700 bg-violet-100/40"
-                                  : "border-amber-700/40 text-amber-800 hover:bg-amber-100/60"}`}
+                                  : "border-amber-700/40 text-amber-800 hover:bg-amber-100/60 disabled:opacity-60"}`}
                   >
-                    {isPermanent
-                      ? (copied ? "✓ Copied!" : "🌌 Permanent link ✓")
-                      : "🌌 Get permanent link"}
+                    {isSavingCloud ? "Saving…" : isPermanent
+                      ? (copied ? "✓ Copied!" : "🌌 Cloud saved ✓")
+                      : "🌌 Save to cloud"}
                   </button>
                 </div>
                 <p className="text-[10px] text-amber-700/60 italic">
                   {isPermanent
-                    ? "Story saved as a galaxy star ✦ anyone with the link can read it"
-                    : "Permanent link works on any device, forever"}
+                    ? "Galaxy star ✦ share the link — works on any device, forever"
+                    : "Cloud save creates a short link and upgrades your star to a galaxy"}
                 </p>
               </div>
             )}
           </div>
         )}
 
-        {/* Read to me */}
+        {/* Read to me + Auto-narration toggle */}
         {supported && (
-          <div className="flex-shrink-0 flex justify-center pt-1.5 sm:pt-2">
+          <div className="flex-shrink-0 flex items-center justify-center gap-3 pt-1.5 sm:pt-2">
             <button
               onClick={handleListen}
               className="rounded-full border-2 border-amber-900/30 px-5 sm:px-6 py-1 sm:py-1.5 text-sm sm:text-base text-amber-900 transition-colors hover:bg-amber-900/5"
             >
               {isPlaying ? "■ Stop" : "▶ Read to me"}
             </button>
+
+            {/* Auto-narration checkbox: advances pages automatically until the end */}
+            <label className="flex items-center gap-1.5 cursor-pointer select-none group">
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={autoNarrate}
+                onClick={() => setAutoNarrate((v) => !v)}
+                className={`w-4 h-4 rounded border-2 flex items-center justify-center
+                            transition-colors flex-shrink-0
+                            ${autoNarrate
+                              ? "bg-amber-700 border-amber-700"
+                              : "border-amber-900/30 bg-transparent group-hover:border-amber-700/50"}`}
+              >
+                {autoNarrate && (
+                  <span className="text-white text-[9px] font-bold leading-none">✓</span>
+                )}
+              </button>
+              <span
+                onClick={() => setAutoNarrate((v) => !v)}
+                className="text-xs text-amber-900/55 group-hover:text-amber-900/80 transition-colors"
+              >
+                Auto-narration
+              </span>
+            </label>
           </div>
         )}
       </div>
