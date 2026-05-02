@@ -223,8 +223,15 @@ export default function NightSounds() {
       scheduleNext();
     };
 
-    // Resume context (some browsers start it suspended)
+    // Resume context — some browsers (especially iOS) start it suspended.
+    // Force-resume on the next user gesture if it's still suspended after creation.
     ctx.resume().catch(() => {});
+    if (ctx.state === "suspended") {
+      const resume = () => { ctx.resume().catch(() => {}); };
+      document.addEventListener("click",      resume, { once: true });
+      document.addEventListener("touchstart", resume, { once: true });
+      document.addEventListener("keydown",    resume, { once: true });
+    }
 
     // Read each animation's real timing from the WAAPI. Critical:
     // Animation.startTime is the document-timeline time when the

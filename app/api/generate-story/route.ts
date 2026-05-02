@@ -59,27 +59,15 @@ const PAGE_COUNT: Record<Length, number> = {
 
 const LANGUAGES = [
   "en",
-  "es",
-  "fr",
-  "de",
-  "it",
-  "pt",
-  "zh",
-  "ja",
-  "ko",
+  "ar",
+  "tl",
 ] as const;
 type Language = (typeof LANGUAGES)[number];
 
 const LANGUAGE_NAME: Record<Language, string> = {
   en: "English",
-  es: "Spanish",
-  fr: "French",
-  de: "German",
-  it: "Italian",
-  pt: "Portuguese",
-  zh: "Mandarin Chinese (Simplified)",
-  ja: "Japanese",
-  ko: "Korean",
+  ar: "Arabic",
+  tl: "Filipino (Tagalog)",
 };
 
 const NAME_PATTERN = /^[A-Za-z][A-Za-z\s'-]{0,49}$/;
@@ -123,6 +111,7 @@ const PRESET_PROMPT: Record<string, string> = {
 };
 
 function buildSystemPrompt(pageCount: number, language: Language): string {
+  if (language === "tl") return buildLullabyPrompt(pageCount);
   const langName = LANGUAGE_NAME[language];
   return `You are a warm, gentle storyteller who writes magical bedtime stories for young children (ages 4-8).
 
@@ -147,6 +136,34 @@ ${Array.from({ length: pageCount }, () => `    "Story text here — do NOT inclu
 
 IMPORTANT: Each page string must contain ONLY the story prose — never start a page with "Page 1:", "Page 2:", or any page label.
 The "pages" array MUST contain exactly ${pageCount} string entries.`;
+}
+
+function buildLullabyPrompt(pageCount: number): string {
+  return `You are a gentle Filipino lullaby writer. Create a beautiful Tagalog bedtime lullaby for a young child.
+
+The lullaby has exactly ${pageCount} stanzas. Each stanza (page) must:
+- Contain exactly 4 short lines of Tagalog verse
+- Each line should be 6-10 syllables, natural to sing aloud
+- Use a simple AABB or ABAB rhyme scheme in Tagalog
+- Be soothing, dreamy, and safe for young children (ages 2-8)
+- Flow like a traditional Filipino lullaby (in the spirit of "Sa Ugoy ng Duyan" or "Ili-Ili Tulog Anay")
+- Weave the child's name naturally into the lullaby (spelled exactly as given)
+
+Format each stanza as 4 lines separated by newline characters (\\n), like:
+"Matulog na, [name], matulog na,\\nSa tahimik na gabi ng buwan,\\nAng mga bituin ay nagbabantay,\\nHanggang umaga, mahal kita."
+
+Write the entire lullaby in Filipino/Tagalog. The title should also be in Tagalog.
+
+You MUST respond with ONLY a valid JSON object in this exact format, no extra text:
+{
+  "title": "Lullaby title in Tagalog",
+  "pages": [
+${Array.from({ length: pageCount }, () => `    "4-line stanza here with \\\\n between each line"`).join(",\n")}
+  ]
+}
+
+The "pages" array MUST contain exactly ${pageCount} string entries.
+NEVER add "Page N:" prefixes.`;
 }
 
 type GeneratedStory = { title: string; pages: string[] };

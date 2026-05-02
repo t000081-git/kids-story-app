@@ -27,8 +27,8 @@
  * the reading view clean.
  */
 
-import { useEffect, useState } from "react";
-import { listSavedStories } from "@/lib/saved-stories";
+import { useEffect, useRef, useState } from "react";
+import { deleteSavedStory, listSavedStories } from "@/lib/saved-stories";
 import type { SavedStory } from "@/lib/saved-stories";
 
 declare global {
@@ -102,9 +102,29 @@ export default function SavedStoryStars() {
   const [stories,  setStories]   = useState<SavedStory[]>([]);
   const [hovered,  setHovered]   = useState<string | null>(null);
   const [wide,     setWide]      = useState(false);
-  const [inStory,  setInStory]   = useState(false); // hidden during reading
+  const [inStory,  setInStory]   = useState(false);
+  const hideTimeout  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function refresh() { setStories(listSavedStories()); }
+
+  function showTooltip(id: string) {
+    if (hideTimeout.current) clearTimeout(hideTimeout.current);
+    setHovered(id);
+  }
+  function scheduleHide() {
+    hideTimeout.current = setTimeout(() => setHovered(null), 180);
+  }
+  function cancelHide() {
+    if (hideTimeout.current) clearTimeout(hideTimeout.current);
+  }
+  function handleDelete(e: React.MouseEvent, id: string) {
+    e.stopPropagation();
+    deleteSavedStory(id);
+    setHovered(null);
+    refresh();
+    window.dispatchEvent(new CustomEvent("ks-stories-updated"));
+  }
 
   useEffect(() => {
     refresh();
@@ -168,14 +188,30 @@ export default function SavedStoryStars() {
             key={story.id}
             className="absolute pointer-events-auto cursor-pointer"
             style={{ left: `${pos.x}%`, top: `${pos.y}%`, transform: "translate(-50%,-50%)" }}
-            onMouseEnter={() => setHovered(story.id)}
-            onMouseLeave={() => setHovered(null)}
-            onTouchStart={() => setHovered(story.id)}
-            onTouchEnd={() => {
-              setTimeout(() => setHovered(null), 1800);
-              window.dispatchEvent(new CustomEvent("ks-load-saved", { detail: story }));
+            onMouseEnter={() => showTooltip(story.id)}
+            onMouseLeave={scheduleHide}
+            onTouchStart={() => {
+              longPressRef.current = setTimeout(() => {
+                longPressRef.current = null;
+                showTooltip(story.id);
+              }, 500);
             }}
-            onClick={() => window.dispatchEvent(new CustomEvent("ks-load-saved", { detail: story }))}
+            onTouchEnd={() => {
+              if (longPressRef.current) {
+                clearTimeout(longPressRef.current);
+                longPressRef.current = null;
+                window.dispatchEvent(new CustomEvent("ks-load-saved", { detail: story }));
+              }
+            }}
+            onTouchMove={() => {
+              if (longPressRef.current) {
+                clearTimeout(longPressRef.current);
+                longPressRef.current = null;
+              }
+            }}
+            onClick={() => {
+              if (!hovered) window.dispatchEvent(new CustomEvent("ks-load-saved", { detail: story }));
+            }}
           >
             {/* Star / galaxy shape */}
             <div
@@ -187,13 +223,25 @@ export default function SavedStoryStars() {
               } as React.CSSProperties}
             />
 
-            {/* Tooltip — edge-aware: flips up/down and left/right as needed */}
+            {/* Tooltip — sticky: stays open when mouse moves from star into tooltip */}
             {isHov && (
-              <div className={`absolute z-[60] ${tipVert} ${tipHoriz}
-                             bg-[#0f0b28]/95 border border-amber-200/25 rounded-xl
-                             p-2.5 min-w-[150px] max-w-[200px] shadow-xl
-                             backdrop-blur-sm pointer-events-none`}>
-                <p className="text-xs text-amber-100 font-medium leading-snug line-clamp-2 mb-1">
+              <div
+                className={`absolute z-[60] ${tipVert} ${tipHoriz}
+                           bg-[#0f0b28]/95 border border-amber-200/25 rounded-xl
+                           p-2.5 min-w-[150px] max-w-[200px] shadow-xl
+                           backdrop-blur-sm`}
+                onMouseEnter={cancelHide}
+                onMouseLeave={scheduleHide}
+              >
+                {/* Delete button */}
+                <button
+                  className="absolute top-1.5 right-1.5 w-5 h-5 flex items-center justify-center rounded-full text-amber-50/40 hover:text-red-300 hover:bg-red-900/30 transition-colors text-xs leading-none"
+                  onClick={(e) => handleDelete(e, story.id)}
+                  aria-label="Delete saved story"
+                  title="Delete"
+                >✕</button>
+
+                <p className="text-xs text-amber-100 font-medium leading-snug line-clamp-2 mb-1 pr-5">
                   {story.title}
                 </p>
                 <p className="text-[11px] text-amber-400 tracking-wide">
@@ -209,7 +257,7 @@ export default function SavedStoryStars() {
                     {parseBrowser(story.userAgent)} · {parseOS(story.userAgent)}
                   </p>
                 )}
-                <p className="text-[9px] text-amber-300/60 mt-1 italic">Click to read</p>
+                <p className="text-[9px] text-amber-300/60 mt-1 italic">Tap to read</p>
               </div>
             )}
           </div>

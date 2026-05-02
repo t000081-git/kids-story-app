@@ -1,38 +1,37 @@
-/**
- * /api/narrate
- * ────────────
- * Calls ElevenLabs text-to-speech with the "with-timestamps" endpoint so
- * the client gets both the audio (base64 MP3) and character-level timing
- * for pixel-perfect karaoke word highlighting.
- *
- * Falls back gracefully: if ELEVENLABS_API_KEY is absent, returns 503 and
- * StoryView falls back to the browser's Web Speech API automatically.
- *
- * Required env var:
- *   ELEVENLABS_API_KEY   — from https://elevenlabs.io → Profile → API Keys
- *
- * Optional env var:
- *   ELEVENLABS_VOICE_ID  — default is Rachel (21m00Tcm4TlvDq8ikWAM),
- *                          warm and narrative; replace with any EL voice ID
- */
-
 import { NextResponse } from "next/server";
 
 export const runtime = "edge";
 export const maxDuration = 30;
 
-// Rachel — warm, narrative, works well for bedtime stories.
-// eleven_multilingual_v2 handles all 9 languages the app supports.
-const DEFAULT_VOICE = "21m00Tcm4TlvDq8ikWAM";
+// Adventure themes → deep male narrator (Adventure Male)
+const ADVENTURE_THEMES = new Set([
+  "dinosaurs", "dragons", "pirates", "knights", "ninjas",
+  "space", "robots", "superheroes", "cars-trucks", "trains",
+  "firefighter", "astronaut", "cowboy", "explorer",
+  "volcano", "time-travel", "haunted", "mountain",
+  "secret-agent", "ocean-dive",
+]);
+
+// Voice IDs (all user-created, work on free tier)
+const VOICE_ADVENTURE_MALE  = "Eio1eLNHG4jFMyXwGco4"; // Adventure Male
+const VOICE_GENTLE_FEMALE   = "GkSPWYK0dF40OoSR1gj3"; // Smooth voice female
+const VOICE_GRANDMA_ARABIC  = "fhJPNMe92P5iPjL1reZT"; // Grandma Arabic
+
+const ALL_VOICES = [VOICE_ADVENTURE_MALE, VOICE_GENTLE_FEMALE, VOICE_GRANDMA_ARABIC];
+
+function pickVoice(language: string, theme: string): string {
+  if (language === "tl") return ALL_VOICES[Math.floor(Math.random() * ALL_VOICES.length)];
+  if (language === "ar") return VOICE_GRANDMA_ARABIC;
+  return ADVENTURE_THEMES.has(theme) ? VOICE_ADVENTURE_MALE : VOICE_GENTLE_FEMALE;
+}
 
 export async function POST(req: Request) {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
-    // Return 503 so StoryView silently falls back to Web Speech API.
     return NextResponse.json({ error: "ElevenLabs not configured" }, { status: 503 });
   }
 
-  let body: { text?: unknown; language?: unknown };
+  let body: { text?: unknown; language?: unknown; theme?: unknown; sing?: unknown };
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Bad request" }, { status: 400 }); }
 
@@ -41,7 +40,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid text" }, { status: 400 });
   }
 
-  const voiceId = process.env.ELEVENLABS_VOICE_ID ?? DEFAULT_VOICE;
+  const language = typeof body.language === "string" ? body.language : "en";
+  const theme    = typeof body.theme    === "string" ? body.theme    : "";
+  const sing     = body.sing === true;
+  const voiceId  = process.env.ELEVENLABS_VOICE_ID ?? pickVoice(language, theme);
+
+  const voiceSettings = sing ? {
+    stability:        0.25,
+    similarity_boost: 0.50,
+    style:            0.90,
+    use_speaker_boost: true,
+  } : {
+    stability:        0.50,
+    similarity_boost: 0.75,
+    style:            0.20,
+    use_speaker_boost: true,
+  };
 
   const upstream = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/with-timestamps`,
@@ -54,12 +68,7 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         text,
         model_id: "eleven_turbo_v2_5",
-        voice_settings: {
-          stability:        0.50,
-          similarity_boost: 0.75,
-          style:            0.20,
-          use_speaker_boost: true,
-        },
+        voice_settings: voiceSettings,
       }),
     },
   ).catch(() => null);

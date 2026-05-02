@@ -12,37 +12,18 @@ import {
 import type { SavedStory } from "@/lib/saved-stories";
 
 export type Theme =
-  | "animals"
-  | "dinosaurs"
-  | "dragons"
-  | "magic"
-  | "pirates"
-  | "princesses"
-  | "knights"
-  | "mermaids"
-  | "unicorns"
-  | "fairies"
-  | "wizards"
-  | "robots"
-  | "superheroes"
-  | "space"
-  | "sea-life"
-  | "ninjas"
-  | "cars-trucks"
-  | "trains"
-  | "farm-animals"
-  | "snowy-day";
+  | "animals"      | "dinosaurs"   | "dragons"      | "magic"
+  | "pirates"      | "princesses"  | "knights"       | "mermaids"
+  | "unicorns"     | "fairies"     | "wizards"       | "robots"
+  | "superheroes"  | "space"       | "sea-life"      | "ninjas"
+  | "cars-trucks"  | "trains"      | "farm-animals"  | "snowy-day"
+  | "ballerina"    | "chef"        | "firefighter"   | "astronaut"
+  | "cowboy"       | "circus"      | "explorer"      | "arctic"
+  | "butterflies"  | "candy-world" | "volcano"       | "time-travel"
+  | "haunted"      | "beach"       | "mountain"      | "forest"
+  | "secret-agent" | "toy-workshop"| "ocean-dive"    | "dream-world";
 export type Length = "short" | "medium" | "long";
-export type Language =
-  | "en"
-  | "es"
-  | "fr"
-  | "de"
-  | "it"
-  | "pt"
-  | "zh"
-  | "ja"
-  | "ko";
+export type Language = "en" | "ar" | "tl";
 export type Story = { title: string; pages: string[] };
 
 export type StoryRequest = {

@@ -41,16 +41,7 @@ export default function NightSky() {
         />
       ))}
 
-      {/* Moon */}
-      <span
-        className="ks-glow absolute select-none"
-        style={{
-          right: "8%", top: "8%", fontSize: "84px",
-          animation: "ks-float 8s ease-in-out infinite, ks-glow 6s ease-in-out infinite",
-        }}
-      >
-        🌙
-      </span>
+      {/* Moon lives in StoryForm as the interactive CTA button */}
 
       {/* Comets */}
       {COMETS.map((c, i) => (
