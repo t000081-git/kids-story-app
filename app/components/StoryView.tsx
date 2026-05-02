@@ -156,8 +156,8 @@ export default function StoryView({
   useEffect(() => { autoNarrateRef.current = autoNarrate; }, [autoNarrate]);
   useEffect(() => {
     pageIdxRef.current = pageIdx;
-    totalRef.current   = total;
-  }, [pageIdx, total]);
+    totalRef.current   = story.pages.length;
+  }, [pageIdx, story.pages.length]);
 
   const prefersReduced = useReducedMotion();
 

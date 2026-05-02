@@ -1,16 +1,20 @@
 /**
  * story-kv.ts
  * ────────────
- * Thin wrapper around @vercel/kv for storing and retrieving stories.
+ * Thin wrapper around @upstash/redis for storing and retrieving stories.
+ * (@vercel/kv was deprecated; Upstash Redis is its replacement on Vercel.)
+ *
+ * Required env vars (set in Vercel dashboard → Integrations → Upstash Redis):
+ *   UPSTASH_REDIS_REST_URL
+ *   UPSTASH_REDIS_REST_TOKEN
  *
  * Key format:  story:{id}
- * TTL:         2 years (Vercel KV free tier supports long TTLs)
- *
+ * TTL:         2 years
  * Short ID:    7 base-62 characters (~56 billion unique values)
  *              e.g. "xK9mP2a"  →  /story/xK9mP2a
  */
 
-import { kv } from "@vercel/kv";
+import { Redis } from "@upstash/redis";
 
 export type StoredStory = {
   id: string;
@@ -23,21 +27,27 @@ export type StoredStory = {
 
 const TTL_SECONDS = 60 * 60 * 24 * 365 * 2; // 2 years
 
-/** Save a story to KV; returns the generated short id. */
+function getRedis() {
+  return new Redis({
+    url:   process.env.UPSTASH_REDIS_REST_URL!,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+  });
+}
+
+/** Save a story to Redis; returns the generated short id. */
 export async function saveStoryToKV(
   story: Omit<StoredStory, "id" | "savedAt">,
 ): Promise<string> {
   const id    = generateShortId();
   const entry: StoredStory = { ...story, id, savedAt: Date.now() };
-  await kv.set(`story:${id}`, entry, { ex: TTL_SECONDS });
+  await getRedis().set(`story:${id}`, entry, { ex: TTL_SECONDS });
   return id;
 }
 
-/** Retrieve a story from KV by its short id. Returns null if not found. */
+/** Retrieve a story by its short id. Returns null if not found. */
 export async function getStoryFromKV(id: string): Promise<StoredStory | null> {
-  // Reject obviously invalid ids before hitting KV
   if (!/^[A-Za-z0-9]{4,12}$/.test(id)) return null;
-  return kv.get<StoredStory>(`story:${id}`);
+  return getRedis().get<StoredStory>(`story:${id}`);
 }
 
 // ── Short-id generator ────────────────────────────────────────────────────────
