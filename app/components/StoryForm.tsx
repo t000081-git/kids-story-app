@@ -283,8 +283,11 @@ export default function StoryForm({
             >
               🌙
             </span>
-            {/* "tell me a story" — arc follows the bottom body of the crescent.
-                overflow=visible prevents SVG from clipping text near the edges. */}
+            {/* "tell me a story" — cubic bezier traces the bottom arc of the
+                golden crescent. Two control points at y=91 give a flat-bottom
+                U shape that follows the circular crescent body, not a pointed V.
+                The path is intentionally wider than the viewBox so the text
+                spans the full visible arc; overflow=visible allows this. */}
             <svg
               viewBox="0 0 110 118"
               className="absolute inset-0 w-full h-full pointer-events-none"
@@ -292,13 +295,13 @@ export default function StoryForm({
               aria-hidden="true"
             >
               <defs>
-                <path id="ks-moon-cta" d="M 20,62 Q 55,76 90,62" fill="none" />
+                <path id="ks-moon-cta" d="M 11,66 C 26,91 84,91 99,66" fill="none" />
               </defs>
               <text style={{
                 fill: "rgba(10, 6, 38, 0.90)",
                 fontSize: "8px",
                 fontWeight: "800",
-                letterSpacing: "1.1px",
+                letterSpacing: "0.9px",
               }}>
                 <textPath href="#ks-moon-cta" startOffset="50%" textAnchor="middle">
                   {isLoading ? "writing…" : "tell me a story"}
