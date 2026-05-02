@@ -28,9 +28,11 @@ export type StoredStory = {
 const TTL_SECONDS = 60 * 60 * 24 * 365 * 2; // 2 years
 
 function getRedis() {
+  // Vercel's Upstash integration injects KV_REST_API_URL / KV_REST_API_TOKEN.
+  // Fall back to the standalone UPSTASH_* names for local dev with .env.local.
   return new Redis({
-    url:   process.env.UPSTASH_REDIS_REST_URL!,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    url:   (process.env.KV_REST_API_URL   ?? process.env.UPSTASH_REDIS_REST_URL)!,
+    token: (process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN)!,
   });
 }
 
