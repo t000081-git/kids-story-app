@@ -274,22 +274,22 @@ export default function StoryForm({
             >
               🌙
             </span>
-            {/* "tell me a story" — path traces the convex outer bottom edge of
-                the crescent. Control point at y=90 matches the downward bow of
-                the moon body. Dark navy text gives clear contrast on gold. */}
+            {/* "tell me a story" — arc follows the bottom body of the crescent.
+                overflow=visible prevents SVG from clipping text near the edges. */}
             <svg
               viewBox="0 0 110 118"
               className="absolute inset-0 w-full h-full pointer-events-none"
+              overflow="visible"
               aria-hidden="true"
             >
               <defs>
-                <path id="ks-moon-cta" d="M 22,70 Q 55,90 88,70" fill="none" />
+                <path id="ks-moon-cta" d="M 18,74 Q 55,86 92,74" fill="none" />
               </defs>
               <text style={{
-                fill: "rgba(10, 6, 38, 0.92)",
-                fontSize: "8.5px",
+                fill: "rgba(10, 6, 38, 0.90)",
+                fontSize: "8px",
                 fontWeight: "800",
-                letterSpacing: "1.3px",
+                letterSpacing: "1.1px",
               }}>
                 <textPath href="#ks-moon-cta" startOffset="50%" textAnchor="middle">
                   {isLoading ? "writing…" : "tell me a story"}
