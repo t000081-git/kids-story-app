@@ -3,6 +3,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { Language, LoadedSavedInfo, Story, Theme } from "./StoryApp";
+import { scheduleMelody, LOOP_DUR } from "@/lib/lullaby-melody";
+import { getAudioCache, setAudioCache } from "@/lib/audio-cache";
 import type { SavedStory, ShareableStory } from "@/lib/saved-stories";
 import { buildShareUrl, updateSavedStory } from "@/lib/saved-stories";
 import { parseBrowser, parseOS } from "./SavedStoryStars";
@@ -22,14 +24,8 @@ const inkContainerExit = {
 
 const LANG_BCP47: Record<Language, string> = {
   en: "en-US",
-  es: "es-ES",
-  fr: "fr-FR",
-  de: "de-DE",
-  it: "it-IT",
-  pt: "pt-PT",
-  zh: "zh-CN",
-  ja: "ja-JP",
-  ko: "ko-KR",
+  ar: "ar-SA",
+  tl: "fil-PH",
 };
 
 function buildImageUrl(theme: string, pageText: string, seed: number): string {
@@ -58,6 +54,26 @@ const THEME_EMOJI: Record<Theme, string[]> = {
   trains:       ["🚂", "🚆", "🛤️", "🌄", "🏞️", "🌲"],
   "farm-animals":["🐮", "🐷", "🐔", "🐑", "🦆", "🌾"],
   "snowy-day":  ["⛄", "❄️", "🛷", "☕", "🧤", "🌨️"],
+  ballerina:    ["🩰", "🌸", "✨", "💃", "🌟", "👑"],
+  chef:         ["👨‍🍳", "🍕", "🎂", "🥐", "🌟", "🥄"],
+  firefighter:  ["🚒", "🔥", "👩‍🚒", "🌟", "🦺", "💪"],
+  astronaut:    ["👨‍🚀", "🌙", "⭐", "🛸", "🌌", "🪐"],
+  cowboy:       ["🤠", "🐎", "🌵", "⭐", "🌅", "🌟"],
+  circus:       ["🎪", "🎠", "🤹", "🎡", "🌟", "🎭"],
+  explorer:     ["🗺️", "🧭", "🌿", "⛺", "🌟", "🦁"],
+  arctic:       ["🐧", "❄️", "🐻‍❄️", "🌨️", "⛄", "🌟"],
+  butterflies:  ["🦋", "🌸", "🌺", "🌿", "✨", "🌼"],
+  "candy-world":["🍭", "🍬", "🍫", "🧁", "🌟", "🍰"],
+  volcano:      ["🌋", "🦕", "🌊", "⚡", "🌟", "🏔️"],
+  "time-travel":["⏰", "🕰️", "⚡", "🌟", "🔬", "🚀"],
+  haunted:      ["👻", "🏚️", "🕷️", "🌙", "🦇", "✨"],
+  beach:        ["🏖️", "🌊", "🐚", "🌴", "☀️", "🦀"],
+  mountain:     ["⛰️", "🏔️", "🦅", "🌟", "🎿", "🌲"],
+  forest:       ["🌲", "🍄", "🦊", "🌿", "🌙", "✨"],
+  "secret-agent":["🕵️", "🔍", "💼", "🌟", "🕶️", "⚡"],
+  "toy-workshop":["🧸", "🎁", "🔧", "🌟", "⚙️", "🎪"],
+  "ocean-dive": ["🤿", "🐙", "🦑", "🐠", "🌊", "💎"],
+  "dream-world":["💭", "🌙", "⭐", "🌈", "✨", "🦋"],
 };
 
 const THEME_GRADIENT: Record<Theme, string> = {
@@ -81,6 +97,26 @@ const THEME_GRADIENT: Record<Theme, string> = {
   trains:        "from-amber-200 via-emerald-100 to-stone-200",
   "farm-animals":"from-amber-200 via-yellow-100 to-emerald-200",
   "snowy-day":   "from-sky-200 via-slate-100 to-blue-200",
+  ballerina:     "from-pink-200 via-rose-100 to-fuchsia-200",
+  chef:          "from-amber-200 via-yellow-100 to-orange-200",
+  firefighter:   "from-red-300 via-amber-100 to-orange-200",
+  astronaut:     "from-indigo-300 via-slate-200 to-blue-200",
+  cowboy:        "from-amber-300 via-orange-100 to-stone-200",
+  circus:        "from-red-200 via-yellow-100 to-violet-200",
+  explorer:      "from-emerald-300 via-amber-100 to-stone-200",
+  arctic:        "from-sky-200 via-blue-100 to-slate-200",
+  butterflies:   "from-fuchsia-200 via-pink-100 to-amber-200",
+  "candy-world": "from-pink-200 via-rose-100 to-amber-200",
+  volcano:       "from-red-300 via-orange-200 to-amber-100",
+  "time-travel": "from-violet-300 via-blue-200 to-amber-100",
+  haunted:       "from-slate-300 via-purple-200 to-stone-200",
+  beach:         "from-sky-200 via-amber-100 to-cyan-200",
+  mountain:      "from-stone-300 via-sky-100 to-emerald-200",
+  forest:        "from-emerald-300 via-green-100 to-amber-200",
+  "secret-agent":"from-slate-300 via-blue-100 to-indigo-200",
+  "toy-workshop":"from-amber-200 via-pink-100 to-violet-200",
+  "ocean-dive":  "from-cyan-300 via-blue-200 to-teal-200",
+  "dream-world": "from-violet-200 via-pink-100 to-sky-200",
 };
 
 const FALLBACK_EMOJI    = ["✨", "🌙", "⭐", "🌟", "🪄", "💫"];
@@ -149,11 +185,13 @@ export default function StoryView({
   const [copied, setCopied]               = useState(false);
   const [isPermanent, setIsPermanent]     = useState(false);
   const [autoNarrate, setAutoNarrate]     = useState(false);
+  const [sing, setSing]                   = useState(false);
   const [isSavingCloud, setIsSavingCloud] = useState(false);
   const [isFetching,   setIsFetching]    = useState(false); // loading EL audio
 
   // Refs for stale-closure safety inside async speech event callbacks
   const autoNarrateRef  = useRef(false);
+  const singRef         = useRef(false);
   const pageIdxRef      = useRef(pageIdx);
   const totalRef        = useRef(story.pages.length);
   // Always points to the latest handleListen (updated every render)
@@ -179,8 +217,33 @@ export default function StoryView({
   const audioFetchAbortRef   = useRef<AbortController | null>(null);
   // Per-page audio cache so re-plays and auto-narration are instant (no re-fetch)
   const pageAudioRef         = useRef<Map<number, { buffer: AudioBuffer; alignment: ELAlignment }>>(new Map());
+  // Lullaby melody (Filipino easter egg)
+  const melodyGainRef           = useRef<GainNode | null>(null);
+  const melodyScheduledUntilRef = useRef(0);
 
   useEffect(() => { autoNarrateRef.current  = autoNarrate;   }, [autoNarrate]);
+  useEffect(() => {
+    singRef.current = sing;
+    // Clear audio cache so switching sing/speak mode re-fetches with new settings
+    pageAudioRef.current.clear();
+    // Reset melody scheduling cursor so next start re-schedules fresh
+    melodyScheduledUntilRef.current = 0;
+  }, [sing]);
+
+  // Lullaby melody: paused for now — ElevenLabs TTS can't truly sing,
+  // so the kalimba background is on hold until a better solution is explored.
+  // Fade-out-only kept so any residual gain is cleaned up if toggled.
+  useEffect(() => {
+    if (!sing || !isPlaying) {
+      const g = melodyGainRef.current;
+      if (!g || g.context.state === "closed") return;
+      const t = g.context.currentTime;
+      g.gain.cancelScheduledValues(t);
+      g.gain.setValueAtTime(Math.max(0, g.gain.value), t);
+      g.gain.linearRampToValueAtTime(0, t + 0.4);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sing, isPlaying]);
   useEffect(() => { imageLoadedRef.current  = imageLoaded;   }, [imageLoaded]);
   useEffect(() => {
     pageIdxRef.current = pageIdx;
@@ -361,22 +424,35 @@ export default function StoryView({
     src.start(0);
     setIsPlaying(true);
 
-    // Background-fetch the NEXT page's audio while this one plays so
+    // Background-prefetch the NEXT page's audio while this one plays so
     // auto-narration transitions are instant (no loading gap between pages).
     const nextIdx = forPageIdx + 1;
     if (nextIdx < story.pages.length && !pageAudioRef.current.has(nextIdx)) {
-      fetch("/api/narrate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: story.pages[nextIdx], language }),
-      })
-        .then((r) => r.ok ? r.json() : Promise.reject())
-        .then((data: { audioBase64: string; alignment: ELAlignment }) =>
-          base64ToAudioBuffer(data.audioBase64).then((buf) => {
-            pageAudioRef.current.set(nextIdx, { buffer: buf, alignment: data.alignment });
-          }),
-        )
-        .catch(() => {});
+      const nextText  = story.pages[nextIdx];
+      const nextSing  = singRef.current;
+      const themeStr2 = theme as string;
+
+      // Check persistent cache first — zero credits if already there
+      const nextPersisted = getAudioCache(nextText, language, themeStr2, nextSing);
+      if (nextPersisted) {
+        base64ToAudioBuffer(nextPersisted.audioBase64)
+          .then((buf) => pageAudioRef.current.set(nextIdx, { buffer: buf, alignment: nextPersisted.alignment }))
+          .catch(() => {});
+      } else {
+        fetch("/api/narrate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: nextText, language, theme, sing: nextSing }),
+        })
+          .then((r) => r.ok ? r.json() : Promise.reject())
+          .then((data: { audioBase64: string; alignment: ELAlignment }) => {
+            setAudioCache(nextText, language, themeStr2, nextSing, { audioBase64: data.audioBase64, alignment: data.alignment });
+            return base64ToAudioBuffer(data.audioBase64).then((buf) => {
+              pageAudioRef.current.set(nextIdx, { buffer: buf, alignment: data.alignment });
+            });
+          })
+          .catch(() => {});
+      }
     }
   }
 
@@ -469,14 +545,29 @@ export default function StoryView({
       return;
     }
 
-    // Use cached audio if available (re-play or pre-fetched next page)
+    // 1. In-memory cache (fastest — already decoded AudioBuffer)
     const cached = pageAudioRef.current.get(pageIdx);
     if (cached) {
       playElevenLabs(cached.buffer, cached.alignment, pageIdx);
       return;
     }
 
-    // Fetch from ElevenLabs
+    // 2. Persistent localStorage cache (no ElevenLabs credits consumed on replay)
+    const pageText   = story.pages[pageIdx];
+    const themeStr   = theme as string;
+    const persisted  = getAudioCache(pageText, language, themeStr, sing);
+    if (persisted) {
+      try {
+        const buffer = await base64ToAudioBuffer(persisted.audioBase64);
+        pageAudioRef.current.set(pageIdx, { buffer, alignment: persisted.alignment });
+        playElevenLabs(buffer, persisted.alignment, pageIdx);
+        return;
+      } catch {
+        // Corrupt cache entry — fall through to fresh fetch
+      }
+    }
+
+    // 3. Fetch from ElevenLabs
     const abort = new AbortController();
     audioFetchAbortRef.current = abort;
     setIsFetching(true);
@@ -485,12 +576,14 @@ export default function StoryView({
       const res = await fetch("/api/narrate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: story.pages[pageIdx], language }),
+        body: JSON.stringify({ text: pageText, language, theme, sing }),
         signal: abort.signal,
       });
 
       if (res.ok) {
         const data = await res.json() as { audioBase64: string; alignment: ELAlignment };
+        // Persist to localStorage so future replays skip ElevenLabs entirely
+        setAudioCache(pageText, language, themeStr, sing, { audioBase64: data.audioBase64, alignment: data.alignment });
         const buffer = await base64ToAudioBuffer(data.audioBase64);
         pageAudioRef.current.set(pageIdx, { buffer, alignment: data.alignment });
         setIsFetching(false);
@@ -663,7 +756,7 @@ export default function StoryView({
               exit={prefersReduced
                 ? { opacity: 0, transition: { duration: 0.15 } }
                 : inkContainerExit}
-              className="text-sm sm:text-xl md:text-2xl leading-relaxed text-amber-950 text-center"
+              className={"text-sm sm:text-xl md:text-2xl leading-relaxed text-amber-950 text-center" + (language === "tl" ? " whitespace-pre-line" : "")}
             >
               {wordSegments.map((s, idx) => {
                 const isActive = isPlaying && highlightCharIdx >= s.start && highlightCharIdx < s.end;
@@ -801,6 +894,33 @@ export default function StoryView({
                 Auto-narration
               </span>
             </label>
+
+            {/* 🇵🇭 Easter egg: lullaby sing mode — only visible when Filipino + auto-narrate */}
+            {language === "tl" && autoNarrate && (
+              <label className="flex items-center gap-1.5 cursor-pointer select-none group">
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={sing}
+                  onClick={() => setSing((v) => !v)}
+                  className={`w-4 h-4 rounded border-2 flex items-center justify-center
+                              transition-colors flex-shrink-0
+                              ${sing
+                                ? "bg-fuchsia-600 border-fuchsia-600"
+                                : "border-amber-900/30 bg-transparent group-hover:border-fuchsia-500/50"}`}
+                >
+                  {sing && (
+                    <span className="text-white text-[9px] font-bold leading-none">✓</span>
+                  )}
+                </button>
+                <span
+                  onClick={() => setSing((v) => !v)}
+                  className="text-xs text-amber-900/45 group-hover:text-fuchsia-700/80 transition-colors"
+                >
+                  🎵 Awitin
+                </span>
+              </label>
+            )}
           </div>
       </div>
 
