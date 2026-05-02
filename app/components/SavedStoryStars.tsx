@@ -173,12 +173,13 @@ export default function SavedStoryStars() {
               } as React.CSSProperties}
             />
 
-            {/* Hover tooltip */}
+            {/* Hover tooltip — flips below the star when near the top edge */}
             {isHov && (
-              <div className="absolute z-[60] bottom-full mb-2 left-1/2 -translate-x-1/2
+              <div className={`absolute z-[60] left-1/2 -translate-x-1/2
                              bg-[#0f0b28]/95 border border-amber-200/25 rounded-xl
                              p-2.5 min-w-[150px] max-w-[200px] shadow-xl
-                             backdrop-blur-sm pointer-events-none">
+                             backdrop-blur-sm pointer-events-none
+                             ${pos.y < 22 ? "top-full mt-2" : "bottom-full mb-2"}`}>
                 <p className="text-xs text-amber-100 font-medium leading-snug line-clamp-2 mb-1">
                   {story.title}
                 </p>

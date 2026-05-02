@@ -228,37 +228,47 @@ export default function StoryView({
 
     const pageText    = story.pages[pageIdx];
     let boundaryFired = false;
-    let fallbackId:   ReturnType<typeof setInterval>  | null = null;
+    const wordTimers: ReturnType<typeof setTimeout>[] = [];
     let safetyTimer:  ReturnType<typeof setTimeout>   | null = null;
+    let startupTimer: ReturnType<typeof setTimeout>   | null = null;
 
-    // ── Karaoke fallback (used on iOS Safari where onboundary never fires) ──
-    // ~12 chars/s at rate=1.0 matches typical iOS TTS pace well; too high a
-    // value causes highlights to run visibly ahead of the spoken word.
+    // ── Karaoke fallback (iOS Safari: onboundary never fires) ──────────────
+    // Schedule one setTimeout per word at its estimated start time rather
+    // than polling with setInterval — gives smoother word-level sync with
+    // no drift between ticks.
+    // ~12 chars/s is a conservative rate for typical iOS TTS at rate=0.95;
+    // iOS also has a ~200ms "synthesis buffer" before audio actually plays
+    // after onstart fires, so we delay the whole word-schedule by 200ms.
     function startFallback() {
-      if (fallbackId) return;               // already running
-      const t0         = Date.now();
+      if (wordTimers.length > 0) return;         // already scheduled
       const charsPerMs = (12 * utterance.rate) / 1000;
-      fallbackId = setInterval(() => {
-        if (boundaryFired) { clearInterval(fallbackId!); fallbackId = null; return; }
-        setHighlight(Math.min(Math.floor((Date.now() - t0) * charsPerMs), pageText.length - 1));
-      }, 60);
+      wordSegments.forEach(({ start }) => {
+        wordTimers.push(
+          setTimeout(() => {
+            if (!boundaryFired) setHighlight(start);
+          }, start / charsPerMs),
+        );
+      });
     }
 
-    // onstart fires when speech actually begins → most accurate start time.
+    // onstart = speech engine is ready; wait 200ms for iOS audio buffer
+    // before scheduling word highlights.
     utterance.onstart = () => {
       if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = null; }
-      startFallback();
+      startupTimer = setTimeout(startFallback, 200);
     };
-    // Safety net: if onstart never fires (some browsers/devices), start after 400 ms.
-    safetyTimer = setTimeout(startFallback, 400);
+    // Safety net: start 600ms after speak() in case onstart never fires.
+    safetyTimer = setTimeout(startFallback, 600);
 
     utterance.onboundary = (e: SpeechSynthesisEvent) => {
       if (e.name === "word" || e.name === "sentence") { boundaryFired = true; setHighlight(e.charIndex); }
     };
 
     function cleanup() {
-      if (safetyTimer) clearTimeout(safetyTimer);
-      if (fallbackId)  clearInterval(fallbackId);
+      if (safetyTimer)  clearTimeout(safetyTimer);
+      if (startupTimer) clearTimeout(startupTimer);
+      wordTimers.forEach(clearTimeout);
+      wordTimers.length = 0;
       setIsPlaying(false);
       setHighlight(-1);
     }
