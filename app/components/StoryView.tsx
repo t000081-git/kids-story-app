@@ -761,7 +761,7 @@ export default function StoryView({
         {/* Illustration */}
         <div
           className="flex-shrink-0 relative w-full overflow-hidden rounded-xl border-2 border-amber-900/15 mb-2 sm:mb-3 aspect-[5/3]"
-          style={{ maxHeight: "min(38vh, 260px)" }}
+          style={{ maxHeight: "min(32vh, 230px)" }}
         >
           {imageError ? (
             <div className={`h-full w-full bg-gradient-to-br ${gradientFor(theme)} flex items-center justify-center`}>
@@ -793,7 +793,10 @@ export default function StoryView({
         </div>
 
         {/* Story text — Magic Ink bloom */}
-        <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden py-2">
+        {/* overflow-y-auto: text scrolls within the card rather than clipping.
+            flex flex-col: lets motion.p use my-auto to stay vertically centered
+            when the content is short enough to fit without scrolling. */}
+        <div className="flex-1 min-h-0 flex flex-col overflow-y-auto overscroll-contain py-1">
           <AnimatePresence mode="wait">
             <motion.p
               key={pageIdx}
@@ -802,7 +805,7 @@ export default function StoryView({
               exit={prefersReduced
                 ? { opacity: 0, transition: { duration: 0.15 } }
                 : inkContainerExit}
-              className={"text-sm sm:text-xl md:text-2xl leading-relaxed text-amber-950 text-center" + (language === "tl" ? " whitespace-pre-line" : "")}
+              className={"my-auto py-1 text-sm sm:text-xl md:text-2xl leading-relaxed text-amber-950 text-center" + (language === "tl" ? " whitespace-pre-line" : "")}
             >
               {wordSegments.map((s, idx) => {
                 const isActive = isPlaying && highlightCharIdx >= s.start && highlightCharIdx < s.end;
