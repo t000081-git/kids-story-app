@@ -724,6 +724,7 @@ export default function StoryView({
   }
 
   return (
+    <>
     <div
       className="w-full max-w-2xl flex flex-col gap-2"
       style={{ maxHeight: "calc(100dvh - 1.5rem)" }}
@@ -1052,5 +1053,6 @@ export default function StoryView({
         </div>
       </div>
     )}
+    </>
   );
 }
