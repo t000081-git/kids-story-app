@@ -281,7 +281,7 @@ export default function StoryForm({
             {nameValid && !isLoading && (
               <div
                 className="absolute pointer-events-none"
-                style={{ top: "30%", left: "54%", animation: "ks-float 8s ease-in-out infinite" }}
+                style={{ top: "35%", left: "52%", animation: "ks-float 8s ease-in-out infinite" }}
               >
                 <div style={{ transform: "translate(-50%, -50%)" }}>
                   <div
