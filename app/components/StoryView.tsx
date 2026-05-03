@@ -126,21 +126,27 @@ function emojiFor(theme: string)    { return THEME_EMOJI[theme as Theme]    ?? F
 function gradientFor(theme: string) { return THEME_GRADIENT[theme as Theme] ?? FALLBACK_GRADIENT; }
 
 function pickBestVoice(voices: SpeechSynthesisVoice[], language: Language) {
+  // Always read fresh — React state may be stale if voiceschanged fired after mount
+  const all = (typeof window !== "undefined" && window.speechSynthesis?.getVoices?.()) || voices;
   const lp = language.toLowerCase();
-  const matching = voices.filter((v) => v.lang.toLowerCase().startsWith(lp));
-  if (!matching.length)
-    return voices.find((v) => v.lang.toLowerCase().startsWith("en") && v.default)
-        ?? voices.find((v) => v.lang.toLowerCase().startsWith("en"));
+  const matching = all.filter((v) => v.lang.toLowerCase().startsWith(lp));
+  const pool = matching.length ? matching : all.filter((v) => v.lang.toLowerCase().startsWith("en"));
+  if (!pool.length) return all[0];
   const tiers = [
-    /premium|enhanced|neural/i,
-    /(google|microsoft).*/i,
-    /samantha|ava|allison|karen|moira|tessa|fiona|nicky|serena|kyoko|otoya|yuna|mei-jia|tian-tian/i,
+    // Apple enhanced / Google WaveNet / Microsoft Neural — best quality
+    /premium|enhanced|neural|wavenet/i,
+    // Named high-quality macOS / iOS voices
+    /samantha|ava|allison|karen|moira|tessa|fiona|nicky|serena/i,
+    // Google TTS voices (Chrome on desktop/Android)
+    /^google/i,
+    // Microsoft voices (Edge / Windows)
+    /^microsoft/i,
   ];
   for (const re of tiers) {
-    const v = matching.find((x) => re.test(x.name));
+    const v = pool.find((x) => re.test(x.name));
     if (v) return v;
   }
-  return matching.find((v) => v.default) ?? matching[0];
+  return pool.find((v) => v.default) ?? pool[0];
 }
 
 function splitWords(text: string) {
@@ -510,11 +516,12 @@ export default function StoryView({
   // ── Web Speech API fallback (iOS Safari / offline) ────────────────────────
   function playWebSpeech() {
     const utterance  = new SpeechSynthesisUtterance(story.pages[pageIdx]);
-    utterance.rate   = 0.95;
-    utterance.pitch  = 1.0;
+    utterance.rate   = 0.88;  // slightly slower = warmer, easier for kids to follow
+    utterance.pitch  = 1.05;
     utterance.volume = 1.0;
     utterance.lang   = LANG_BCP47[language];
 
+    // Pass current voices state but pickBestVoice also reads getVoices() fresh
     const voice = pickBestVoice(voices, language);
     if (voice) { utterance.voice = voice; utterance.lang = voice.lang || LANG_BCP47[language]; }
 
