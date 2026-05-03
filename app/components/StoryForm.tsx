@@ -297,7 +297,7 @@ export default function StoryForm({
                 {/* Lora (narrower than Fredoka) + 8.5px fits the ~75-unit arc.
                     Path sweeps from inner-left edge (36,60) to upper-right gold
                     (96,24) — enough arc length for all 15 chars without clipping. */}
-                <path id="ks-moon-cta" d="M 36,76 C 52,85 82,68 96,24" fill="none" />
+                <path id="ks-moon-cta" d="M 26,76 C 49,90 73,90 96,24" fill="none" />
               </defs>
               <text style={{
                 fontFamily: "var(--font-lora), Georgia, serif",
