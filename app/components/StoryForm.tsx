@@ -270,27 +270,34 @@ export default function StoryForm({
                 : "drop-shadow(0 0 6px rgba(255,200,80,0.15)) saturate(0.5)",
             }}
           >
+            {/* Pulsing ring — lives OUTSIDE the inner float wrapper so it is never
+                decoupled by the browser compositor when ks-glow (filter animation)
+                promotes children to their own layers.
+                Three-div split:
+                  1. float-anchor: own ks-float keeps it in step with the moon
+                  2. centre-anchor: static translate(-50%,-50%) — no animation, no conflict
+                  3. ring itself: ks-moon-ring (scale + opacity only)
+                Placed before the inner wrapper → renders behind the moon. */}
+            {nameValid && !isLoading && (
+              <div
+                className="absolute pointer-events-none"
+                style={{ top: "30%", left: "54%", animation: "ks-float 8s ease-in-out infinite" }}
+              >
+                <div style={{ transform: "translate(-50%, -50%)" }}>
+                  <div
+                    className="rounded-full border-2 border-amber-300/60 w-[95px] h-[95px] sm:w-[136px] sm:h-[136px]"
+                    style={{ animation: "ks-moon-ring 2.2s ease-out infinite" }}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Inner wrapper: float + glow animation applied here so moon emoji
                 AND SVG text move as a single unit */}
             <div
               className="absolute inset-0 group-hover:drop-shadow-[0_0_32px_rgba(255,215,80,0.95)]"
               style={{ animation: "ks-float 8s ease-in-out infinite, ks-glow 6s ease-in-out infinite" }}
             >
-            {/* Pulsing ring — two-div split so the centering translate(-50%,-50%)
-                is never clobbered by the animation's transform: scale(…).
-                Outer div: positions the ring's centre at the crescent's golden body.
-                Inner div: carries the animation (scale + opacity only). */}
-            {nameValid && !isLoading && (
-              <div
-                className="absolute pointer-events-none"
-                style={{ top: "30%", left: "54%", transform: "translate(-50%, -50%)" }}
-              >
-                <div
-                  className="rounded-full border-2 border-amber-300/60 w-[95px] h-[95px] sm:w-[136px] sm:h-[136px]"
-                  style={{ animation: "ks-moon-ring 2.2s ease-out infinite" }}
-                />
-              </div>
-            )}
             {/* Moon emoji */}
             <span
               className="absolute top-0 left-0 right-0 text-center leading-none select-none
