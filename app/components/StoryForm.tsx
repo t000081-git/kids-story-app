@@ -306,7 +306,7 @@ export default function StoryForm({
                 fontWeight: "800",
                 letterSpacing: "0.1px",
               }}>
-                <textPath href="#ks-moon-cta" startOffset="59%" textAnchor="middle">
+                <textPath href="#ks-moon-cta" startOffset="36%" textAnchor="middle">
                   {isLoading ? "writing…" : "tell me a story"}
                 </textPath>
               </text>
