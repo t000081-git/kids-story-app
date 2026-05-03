@@ -282,7 +282,7 @@ export default function StoryForm({
               <div
                 className="absolute rounded-full border-2 border-amber-300/60 pointer-events-none w-[95px] h-[95px] sm:w-[136px] sm:h-[136px]"
                 style={{
-                  top: "30%", left: "53%",
+                  top: "26%", left: "48%",
                   transform: "translate(-50%, -50%)",
                   animation: "ks-moon-ring 2.2s ease-out infinite",
                 }}
