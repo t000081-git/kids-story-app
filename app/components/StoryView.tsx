@@ -4,16 +4,6 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type { Language, LoadedSavedInfo, Story, Theme } from "./StoryApp";
 import { scheduleMelody, getMelodyStyle, getMelodyLoopDur } from "@/lib/lullaby-melody";
-import type { MelodyStyle } from "@/lib/lullaby-melody";
-
-// ── Lullaby style selector ───────────────────────────────────────────────────
-const MELODY_STYLES: { style: MelodyStyle; emoji: string; label: string }[] = [
-  { style: "kalimba",   emoji: "🎹", label: "Kalimba"   },
-  { style: "sparkle",   emoji: "✨", label: "Sparkle"   },
-  { style: "adventure", emoji: "⚔️", label: "Adventure" },
-  { style: "nature",    emoji: "🌿", label: "Nature"    },
-  { style: "haunted",   emoji: "👻", label: "Haunted"   },
-];
 import { getAudioCache, setAudioCache } from "@/lib/audio-cache";
 import type { SavedStory, ShareableStory } from "@/lib/saved-stories";
 import { buildShareUrl, updateSavedStory } from "@/lib/saved-stories";
@@ -202,12 +192,6 @@ export default function StoryView({
   const [isPermanent, setIsPermanent]     = useState(false);
   const [autoNarrate, setAutoNarrate]     = useState(false);
   const [sing, setSing]                   = useState(false);
-  // Melody style — defaults to the theme-appropriate style, but the user can
-  // switch with the compact picker that appears when lullaby is on.
-  const [melodyStyleIdx, setMelodyStyleIdx] = useState(() => {
-    const def = MELODY_STYLES.findIndex(m => m.style === getMelodyStyle(theme));
-    return def >= 0 ? def : 0;
-  });
   const [isSavingCloud, setIsSavingCloud] = useState(false);
   const [isFetching,   setIsFetching]    = useState(false); // loading EL audio
   // Toast phase machine:
@@ -277,17 +261,16 @@ export default function StoryView({
   }, [sing]);
 
   // Lullaby melody — plays as background music while sing mode is active.
+  // The style is chosen automatically from the story's theme (same logic as
+  // voice narrator selection): magic/fairy → sparkle, adventure/space → adventure,
+  // animals/nature → nature, haunted → haunted, everything else → kalimba.
   // Uses a setInterval keepalive so the music never stops mid-story.
   //
   // Double-layer prevention: the ref is cleared to null on every disable
   // so re-enabling always creates a FRESH GainNode. Previously-scheduled
   // oscillators remain connected to the old (silenced) node and never
   // re-activate — they just run at gain=0 until their scheduled stop time.
-  // Style changes (melodyStyleIdx) crossfade the old node out (300 ms) while
-  // the new one fades in so there's no jarring cut.
   useEffect(() => {
-    const style = MELODY_STYLES[melodyStyleIdx]?.style ?? "kalimba";
-
     if (!sing || !isPlaying) {
       // Pull the ref out and clear it FIRST — any subsequent enable will see
       // null and create a new GainNode, orphaning the old oscillators.
@@ -307,20 +290,11 @@ export default function StoryView({
     const ctx = audioCtxRef.current;
     if (!ctx || ctx.state === "closed") return;
 
-    // Crossfade out any previous GainNode (handles style switches mid-play)
-    const prev = melodyGainRef.current;
-    if (prev && prev.context.state !== "closed") {
-      const t = prev.context.currentTime;
-      prev.gain.cancelScheduledValues(t);
-      prev.gain.setValueAtTime(Math.max(0, prev.gain.value), t);
-      prev.gain.linearRampToValueAtTime(0, t + 0.3);
-    }
-    melodyGainRef.current = null;
-    melodyScheduledUntilRef.current = 0;
-
+    const style   = getMelodyStyle(theme);
     const loopDur = getMelodyLoopDur(style);
 
-    // Fresh GainNode for the new style
+    // Always create a fresh GainNode — ref is null after any disable,
+    // so old oscillators can never play again through this new node.
     const g = ctx.createGain();
     g.gain.value = 0;
     g.connect(ctx.destination);
@@ -340,16 +314,16 @@ export default function StoryView({
       const gn = melodyGainRef.current;
       if (!c || c.state === "closed" || !gn) return;
       const t2 = c.currentTime;
-      const ld = getMelodyLoopDur(style);
+      const ld = getMelodyLoopDur(getMelodyStyle(theme));
       if (melodyScheduledUntilRef.current <= t2 + 20) {
-        scheduleMelody(c, gn, melodyScheduledUntilRef.current, 3, style);
+        scheduleMelody(c, gn, melodyScheduledUntilRef.current, 3, getMelodyStyle(theme));
         melodyScheduledUntilRef.current += 3 * ld;
       }
     }, 8_000);
 
     return () => clearInterval(iv);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sing, isPlaying, melodyStyleIdx]);
+  }, [sing, isPlaying, theme]);
   // Auto-scroll: when narration advances to a new word, scroll it into view
   // within the story-text container so the highlighted word is always visible.
   useEffect(() => {
@@ -1106,25 +1080,6 @@ export default function StoryView({
               🎵 Lullaby music
             </button>
 
-            {/* Melody style picker — only visible when lullaby is on */}
-            {sing && (
-              <div className="flex items-center gap-0.5 pl-0.5" title="Choose melody style">
-                {MELODY_STYLES.map((m, i) => (
-                  <button
-                    key={m.style}
-                    type="button"
-                    title={m.label}
-                    onClick={() => setMelodyStyleIdx(i)}
-                    className={`w-6 h-6 rounded-full text-sm flex items-center justify-center transition-all
-                                ${melodyStyleIdx === i
-                                  ? "bg-fuchsia-600/25 border border-fuchsia-500/70 scale-110"
-                                  : "border border-transparent opacity-50 hover:opacity-100 hover:bg-fuchsia-500/10"}`}
-                  >
-                    {m.emoji}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
       </div>
 
