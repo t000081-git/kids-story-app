@@ -149,12 +149,17 @@ Each story must:
 
 Write the entire story (both the title AND every page) in ${langName}. The child's name should remain spelled exactly as given by the user, even when the rest of the text is in ${langName}.${tagalogExtra}${arabicExtra}
 
+${language !== "en" ? `Also include an "imageHints" array: one short English phrase per page (8–12 words) describing the key visual scene for illustration purposes only. Example: "child riding a dragon over a glowing golden castle". These are never shown to the reader.` : ""}
+
 You MUST respond with ONLY a valid JSON object in this exact format, with no additional text before or after:
 {
   "title": "Story title in ${langName}",
   "pages": [
 ${Array.from({ length: pageCount }, () => `    "Story text here — do NOT include a 'Page N:' prefix"`).join(",\n")}
-  ]
+  ]${language !== "en" ? `,
+  "imageHints": [
+${Array.from({ length: pageCount }, () => `    "English scene description for illustration"`).join(",\n")}
+  ]` : ""}
 }
 
 IMPORTANT: Each page string must contain ONLY the story prose — never start a page with "Page 1:", "Page 2:", or any page label.
@@ -189,7 +194,7 @@ The "pages" array MUST contain exactly ${pageCount} string entries.
 NEVER add "Page N:" prefixes.`;
 }
 
-type GeneratedStory = { title: string; pages: string[] };
+type GeneratedStory = { title: string; pages: string[]; imageHints?: string[] };
 
 // Each model attempt gets 25 s. All models are fired IN PARALLEL so the
 // fastest one wins — we're not limited by the slowest queue any more.
@@ -258,7 +263,7 @@ async function tryGenerate(
       .replace(/\s*```$/, "")
       .trim();
 
-    let parsed: { title?: unknown; pages?: unknown };
+    let parsed: { title?: unknown; pages?: unknown; imageHints?: unknown };
     try {
       parsed = JSON.parse(cleaned);
     } catch {
@@ -280,7 +285,16 @@ async function tryGenerate(
     const pages = (parsed.pages as string[]).map((p) =>
       p.trim().replace(/^[Pp]age\s*\d+\s*[:.\-–—]\s*/u, ""),
     );
-    return { title: parsed.title.trim(), pages };
+
+    // imageHints: optional English scene descriptions for non-English stories
+    const imageHints =
+      Array.isArray(parsed.imageHints) &&
+      parsed.imageHints.length === pageCount &&
+      parsed.imageHints.every((h) => typeof h === "string")
+        ? (parsed.imageHints as string[]).map((h) => h.trim())
+        : undefined;
+
+    return { title: parsed.title.trim(), pages, ...(imageHints ? { imageHints } : {}) };
   } finally {
     clearTimeout(abortTimer);
   }

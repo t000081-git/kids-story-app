@@ -226,7 +226,7 @@ function playTick(ctx: AudioContext, intensity: number) {
     const now  = ctx.currentTime;
     // Fundamental: 180 Hz (slow spin) → 380 Hz (fast spin) — stays mid-register
     const fund = 180 + intensity * 200;
-    const vol  = 0.05 + intensity * 0.11; // quieter ceiling than before (max ~0.16)
+    const vol  = 0.025 + intensity * 0.055; // softer ceiling (max ~0.08)
     const dur  = 0.10;                    // slightly longer for a softer feel
 
     // ── Fundamental sine ──────────────────────────────────────────────────

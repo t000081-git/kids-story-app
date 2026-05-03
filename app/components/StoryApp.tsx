@@ -24,7 +24,7 @@ export type Theme =
   | "secret-agent" | "toy-workshop"| "ocean-dive"    | "dream-world";
 export type Length = "short" | "medium" | "long";
 export type Language = "en" | "ar" | "tl";
-export type Story = { title: string; pages: string[] };
+export type Story = { title: string; pages: string[]; imageHints?: string[] };
 
 export type StoryRequest = {
   name: string;

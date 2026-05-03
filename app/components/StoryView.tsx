@@ -28,8 +28,8 @@ const LANG_BCP47: Record<Language, string> = {
   tl: "fil-PH",
 };
 
-function buildImageUrl(theme: string, pageText: string, seed: number): string {
-  const params = new URLSearchParams({ theme, text: pageText, seed: String(seed) });
+function buildImageUrl(theme: string, pageText: string, seed: number, imageHint?: string): string {
+  const params = new URLSearchParams({ theme, text: imageHint ?? pageText, seed: String(seed) });
   return `/api/illustration?${params.toString()}`;
 }
 
@@ -315,7 +315,7 @@ export default function StoryView({
   const isLast  = pageIdx === total - 1;
 
   const imageUrls = useMemo(
-    () => story.pages.map((text, i) => buildImageUrl(theme, text, i + 1)),
+    () => story.pages.map((text, i) => buildImageUrl(theme, text, i + 1, story.imageHints?.[i])),
     [story, theme],
   );
 
