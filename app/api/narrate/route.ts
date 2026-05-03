@@ -71,7 +71,9 @@ export async function POST(req: Request) {
       },
       body: JSON.stringify({
         text,
-        model_id: "eleven_turbo_v2_5",
+        // eleven_multilingual_v2 gives noticeably better Arabic & Tagalog quality;
+        // eleven_turbo_v2_5 is faster and sufficient for English.
+        model_id: language === "en" ? "eleven_turbo_v2_5" : "eleven_multilingual_v2",
         voice_settings: voiceSettings,
       }),
     },
