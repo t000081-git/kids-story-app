@@ -105,8 +105,11 @@ export default function SavedStoryStars() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [wide,          setWide]          = useState(false);
   const [inStory,       setInStory]       = useState(false);
-  const hideTimeout  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hideTimeout       = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ref mirror of confirmDelete so scheduleHide always reads the live value
+  // even if called before React has flushed a click-triggered re-render.
+  const confirmDeleteRef  = useRef<string | null>(null);
 
   function refresh() { setStories(listSavedStories()); }
 
@@ -119,16 +122,30 @@ export default function SavedStoryStars() {
     setHovered(id);
   }
   function scheduleHide() {
+    // While the delete-confirmation dialog is open, mouse-leave must never
+    // close the tooltip — the user needs to reach the Delete / Keep buttons.
+    if (confirmDeleteRef.current !== null) return;
     hideTimeout.current = setTimeout(() => {
       setHovered(null);
-      setConfirmDelete(null); // reset confirm state when tooltip disappears
+      setConfirmDelete(null);
     }, 180);
   }
   function cancelHide() {
     if (hideTimeout.current) clearTimeout(hideTimeout.current);
   }
+  function openConfirm(e: React.MouseEvent, id: string) {
+    e.stopPropagation();
+    confirmDeleteRef.current = id;   // update ref immediately (before re-render)
+    setConfirmDelete(id);
+  }
+  function closeConfirm(e: React.MouseEvent) {
+    e.stopPropagation();
+    confirmDeleteRef.current = null;
+    setConfirmDelete(null);
+  }
   function handleDelete(e: React.MouseEvent, id: string) {
     e.stopPropagation();
+    confirmDeleteRef.current = null;
     deleteSavedStory(id);
     setHovered(null);
     setConfirmDelete(null);
@@ -262,7 +279,7 @@ export default function SavedStoryStars() {
                       </button>
                       <button
                         className="flex-1 text-[10px] rounded border border-amber-200/20 text-amber-50/60 hover:text-amber-50/90 transition-colors py-1 leading-none"
-                        onClick={(e) => { e.stopPropagation(); setConfirmDelete(null); }}
+                        onClick={(e) => closeConfirm(e)}
                       >
                         Keep
                       </button>
@@ -274,7 +291,7 @@ export default function SavedStoryStars() {
                     {/* Delete — opens inline confirmation, does NOT delete immediately */}
                     <button
                       className="absolute top-1.5 right-1.5 w-5 h-5 flex items-center justify-center rounded-full text-amber-50/40 hover:text-red-300 hover:bg-red-900/30 transition-colors text-xs leading-none"
-                      onClick={(e) => { e.stopPropagation(); setConfirmDelete(story.id); }}
+                      onClick={(e) => openConfirm(e, story.id)}
                       aria-label="Delete saved story"
                       title="Delete"
                     >✕</button>
