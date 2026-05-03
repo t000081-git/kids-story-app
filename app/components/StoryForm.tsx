@@ -294,18 +294,17 @@ export default function StoryForm({
               aria-hidden="true"
             >
               <defs>
-                {/* Sweep from lower-left through the thick golden mass to upper-right.
-                    Left anchor y=58 (lower, near inner-left edge),
-                    right anchor y=34 (higher, toward upper-right gold),
-                    controls y=68/56 give a smooth CW-rotated arc that traces
-                    the centre of the crescent body diagonally. */}
-                <path id="ks-moon-cta" d="M 33,57 C 50,65 78,40 94,32" fill="none" />
+                {/* Lora (narrower than Fredoka) + 8.5px fits the ~75-unit arc.
+                    Path sweeps from inner-left edge (36,60) to upper-right gold
+                    (96,24) — enough arc length for all 15 chars without clipping. */}
+                <path id="ks-moon-cta" d="M 36,60 C 52,68 82,38 96,24" fill="none" />
               </defs>
               <text style={{
+                fontFamily: "var(--font-lora), Georgia, serif",
                 fill: "rgba(10, 6, 38, 0.90)",
-                fontSize: "9px",
+                fontSize: "8.5px",
                 fontWeight: "800",
-                letterSpacing: "0.85px",
+                letterSpacing: "0.1px",
               }}>
                 <textPath href="#ks-moon-cta" startOffset="50%" textAnchor="middle">
                   {isLoading ? "writing…" : "tell me a story"}
