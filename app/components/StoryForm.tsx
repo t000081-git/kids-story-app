@@ -294,9 +294,12 @@ export default function StoryForm({
               aria-hidden="true"
             >
               <defs>
-                {/* left y=48, controls y=72, right y=54 — slight CW tilt follows
-                    the crescent's diagonal lean (left horn is higher on screen) */}
-                <path id="ks-moon-cta" d="M 12,48 C 26,72 84,72 99,54" fill="none" />
+                {/* Sweep from lower-left through the thick golden mass to upper-right.
+                    Left anchor y=58 (lower, near inner-left edge),
+                    right anchor y=34 (higher, toward upper-right gold),
+                    controls y=68/56 give a smooth CW-rotated arc that traces
+                    the centre of the crescent body diagonally. */}
+                <path id="ks-moon-cta" d="M 18,58 C 32,68 78,44 94,34" fill="none" />
               </defs>
               <text style={{
                 fill: "rgba(10, 6, 38, 0.90)",
