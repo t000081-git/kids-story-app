@@ -194,9 +194,19 @@ export default function StoryView({
   const [sing, setSing]                   = useState(false);
   const [isSavingCloud, setIsSavingCloud] = useState(false);
   const [isFetching,   setIsFetching]    = useState(false); // loading EL audio
-  // Toast phase machine: 'in' → slide up  |  'hold' → stay visible  |  'fly' → launch to star
-  type ToastPhase = 'in' | 'hold' | 'fly';
-  type ToastInfo  = { message: string; storyId: string; phase: ToastPhase };
+  // Toast phase machine:
+  //   'in'   → slide-up bounce
+  //   'hold' → visible for 4 s
+  //   'fly'  → races to star position (still visible, slight shrink)
+  //   'poof' → mini-explosion at star; pill is hidden
+  type ToastPhase = 'in' | 'hold' | 'fly' | 'poof';
+  type ToastInfo  = {
+    message:  string;
+    storyId:  string;
+    isGalaxy: boolean;
+    phase:    ToastPhase;
+    starPos?: { x: number; y: number }; // screen-px centre of target star
+  };
   const [toast,        setToast]    = useState<ToastInfo | null>(null);
   const [flyStyle,     setFlyStyle] = useState<React.CSSProperties>({});
   const toastWrapRef                = useRef<HTMLDivElement | null>(null);
@@ -678,24 +688,32 @@ export default function StoryView({
   // freshest version of handleListen (with the right pageIdx in closure).
   handleListenRef.current = handleListen;
 
-  function showToast(message: string, storyId: string) {
-    // Cancel any in-flight toast
+  // FLY_DUR: how long the pill takes to reach the star (ms)
+  const FLY_DUR = 700;
+  // POOF_DUR: how long the explosion animation plays (ms)
+  const POOF_DUR = 600;
+
+  function showToast(message: string, storyId: string, isGalaxy: boolean) {
     toastTimers.current.forEach(clearTimeout);
     toastTimers.current = [];
     setFlyStyle({});
-    setToast({ message, storyId, phase: 'in' });
-    // Settle into 'hold' after the slide-in completes
+    setToast({ message, storyId, isGalaxy, phase: 'in' });
+    // slide-in → hold
     toastTimers.current.push(setTimeout(() =>
       setToast(t => t ? { ...t, phase: 'hold' } : null), 420));
-    // Launch 'fly' after 4 s
+    // hold → fly (after 4 s)
     toastTimers.current.push(setTimeout(() =>
-      setToast(t => t ? { ...t, phase: 'fly' } : null), 4000));
-    // Remove from DOM after fly lands (~0.75 s)
-    toastTimers.current.push(setTimeout(() => setToast(null), 4800));
+      setToast(t => t ? { ...t, phase: 'fly'  } : null), 4000));
+    // fly → poof (pill has arrived)
+    toastTimers.current.push(setTimeout(() =>
+      setToast(t => t ? { ...t, phase: 'poof' } : null), 4000 + FLY_DUR));
+    // poof → gone
+    toastTimers.current.push(setTimeout(() =>
+      setToast(null), 4000 + FLY_DUR + POOF_DUR));
   }
 
-  // When the toast enters 'fly' phase, calculate the displacement from the
-  // pill's current centre to the target star/galaxy and apply a CSS transition.
+  // When the toast enters 'fly', compute displacement pill-centre → star-centre
+  // and slide the pill there (arrives visible; poof handles the exit).
   useEffect(() => {
     if (toast?.phase !== 'fly') return;
     const wrap = toastWrapRef.current;
@@ -707,22 +725,25 @@ export default function StoryView({
       const cx    = wRect.left + wRect.width  / 2;
       const cy    = wRect.top  + wRect.height / 2;
 
-      // Default: float up and vanish if the star isn't on screen yet
-      let tx = 0, ty = -80;
+      let tx = 0, ty = -100;
+      let starPos = { x: cx, y: cy - 100 };
+
       if (star) {
         const sRect = star.getBoundingClientRect();
-        tx = (sRect.left + sRect.width  / 2) - cx;
-        ty = (sRect.top  + sRect.height / 2) - cy;
+        const sx = sRect.left + sRect.width  / 2;
+        const sy = sRect.top  + sRect.height / 2;
+        tx = sx - cx;
+        ty = sy - cy;
+        starPos = { x: sx, y: sy };
       }
 
+      // Store star screen-position so the poof renders at exactly the right spot
+      setToast(t => t ? { ...t, starPos } : null);
+
       setFlyStyle({
-        // translateX(-50%) keeps the centering; translate(tx,ty) flies to star; scale shrinks to a dot
-        transform:  `translateX(calc(-50% + ${tx}px)) translateY(${ty}px) scale(0.05)`,
-        opacity:    0,
-        transition: [
-          "transform 0.72s cubic-bezier(0.55, 0.05, 1, 0.5)",
-          "opacity   0.50s ease-in 0.18s",
-        ].join(", "),
+        // Pill arrives at star visible — scale shrinks a bit so it "enters" the star
+        transform:  `translateX(calc(-50% + ${tx}px)) translateY(${ty}px) scale(0.75)`,
+        transition: `transform ${FLY_DUR}ms cubic-bezier(0.4, 0.05, 0.6, 0.95)`,
       });
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -739,7 +760,7 @@ export default function StoryView({
       userAgent: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
     });
     setSavedEntry(entry);
-    showToast("⭐ A new star has been added to your night sky!", entry.id);
+    showToast("⭐ A new star has been added to your night sky!", entry.id, false);
   }
 
   /** Save story to Vercel KV → get short URL → turn local star into galaxy. */
@@ -759,7 +780,7 @@ export default function StoryView({
       updateSavedStory(savedEntry.id, { shareUrl: fullUrl });
       window.dispatchEvent(new CustomEvent("ks-stories-updated"));
       setIsPermanent(true);
-      showToast("🌌 A galaxy has bloomed in your sky — link copied!", savedEntry.id);
+      showToast("🌌 A galaxy has bloomed in your sky — link copied!", savedEntry.id, true);
       navigator.clipboard?.writeText(fullUrl).then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2500);
@@ -1085,27 +1106,17 @@ export default function StoryView({
       </div>
     </div>
 
-    {/* ── Sky toast — 3-phase: slide in → hold 4 s → fly to star/galaxy ──
-        Outer div: handles horizontal centering + fly transform (JS-driven).
-        Inner div: slide-in animation on 'in' phase only.               */}
-    {toast && (
+    {/* ── Pill — visible during 'in', 'hold', 'fly'; hidden in 'poof' ── */}
+    {toast && toast.phase !== 'poof' && (
       <div
         ref={toastWrapRef}
         key={toast.storyId}
         className="fixed z-50 pointer-events-none"
-        style={{
-          bottom: "5rem",
-          left: "50%",
-          transform: "translateX(-50%)",
-          ...flyStyle,
-        }}
+        style={{ bottom: "5rem", left: "50%", transform: "translateX(-50%)", ...flyStyle }}
       >
-        <div
-          style={{
-            animation: toast.phase === "in"
-              ? "ks-toast-in 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) forwards"
-              : undefined,
-          }}
+        <div style={{ animation: toast.phase === "in"
+          ? "ks-toast-in 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) forwards"
+          : undefined }}
         >
           <div className="flex items-center gap-2.5 rounded-2xl border border-amber-300/30 bg-[rgba(10,6,38,0.92)] backdrop-blur-sm px-5 py-3 text-sm text-amber-100 shadow-xl shadow-black/40 whitespace-nowrap">
             {toast.message}
@@ -1113,6 +1124,47 @@ export default function StoryView({
         </div>
       </div>
     )}
+
+    {/* ── Poof — mini-explosion rendered at the star's screen position ── */}
+    {toast?.phase === 'poof' && toast.starPos && (() => {
+      const gold   = "rgba(252,211,77,";
+      const purple = "rgba(180,130,255,";
+      const c      = toast.isGalaxy ? purple : gold;
+      return (
+        <div
+          className="fixed z-50 pointer-events-none"
+          style={{ left: toast.starPos.x, top: toast.starPos.y, transform: "translate(-50%,-50%)" }}
+        >
+          {/* 3 expanding rings — staggered so they ripple outward */}
+          {[0, 90, 190].map((delay, i) => (
+            <div key={i} className="absolute rounded-full"
+              style={{
+                width: 8 + i * 6, height: 8 + i * 6,
+                marginLeft: -(4 + i * 3), marginTop: -(4 + i * 3),
+                border: `2px solid ${c}${0.9 - i * 0.2})`,
+                animation: `ks-poof-ring 0.55s ease-out ${delay}ms forwards`,
+              }}
+            />
+          ))}
+          {/* 6 spark lines radiating outward */}
+          {[0, 60, 120, 180, 240, 300].map((deg, i) => (
+            <div key={`sp${i}`} className="absolute"
+              style={{
+                width: 3, height: 10, borderRadius: 2,
+                background: `${c}0.85)`,
+                transformOrigin: "50% 100%",
+                transform: `rotate(${deg}deg) translateY(-14px)`,
+                animation: `ks-poof-spark 0.5s ease-out ${i * 18}ms forwards`,
+              }}
+            />
+          ))}
+          {/* Emoji flash — scales up and fades */}
+          <div style={{ animation: "ks-poof-core 0.55s ease-out forwards", fontSize: "1.6rem", lineHeight: 1 }}>
+            {toast.isGalaxy ? "🌌" : "⭐"}
+          </div>
+        </div>
+      );
+    })()}
     </>
   );
 }
