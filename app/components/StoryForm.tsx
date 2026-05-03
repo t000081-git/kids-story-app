@@ -297,7 +297,7 @@ export default function StoryForm({
                 {/* Lora (narrower than Fredoka) + 8.5px fits the ~75-unit arc.
                     Path sweeps from inner-left edge (36,60) to upper-right gold
                     (96,24) — enough arc length for all 15 chars without clipping. */}
-                <path id="ks-moon-cta" d="M 26,79 C 49,116 73,116 96,24" fill="none" />
+                <path id="ks-moon-cta" d="M 26,79 C 49,84 73,84 96,24" fill="none" />
               </defs>
               <text style={{
                 fontFamily: "var(--font-lora), Georgia, serif",
@@ -306,7 +306,7 @@ export default function StoryForm({
                 fontWeight: "800",
                 letterSpacing: "0.1px",
               }}>
-                <textPath href="#ks-moon-cta" startOffset="36%" textAnchor="middle">
+                <textPath href="#ks-moon-cta" startOffset="59%" textAnchor="middle">
                   {isLoading ? "writing…" : "tell me a story"}
                 </textPath>
               </text>
