@@ -276,17 +276,20 @@ export default function StoryForm({
               className="absolute inset-0 group-hover:drop-shadow-[0_0_32px_rgba(255,215,80,0.95)]"
               style={{ animation: "ks-float 8s ease-in-out infinite, ks-glow 6s ease-in-out infinite" }}
             >
-            {/* Pulsing ring — inside the floating wrapper so it moves with the moon.
-                Centred on the crescent's golden body (≈53% left, 30% top of inner div). */}
+            {/* Pulsing ring — two-div split so the centering translate(-50%,-50%)
+                is never clobbered by the animation's transform: scale(…).
+                Outer div: positions the ring's centre at the crescent's golden body.
+                Inner div: carries the animation (scale + opacity only). */}
             {nameValid && !isLoading && (
               <div
-                className="absolute rounded-full border-2 border-amber-300/60 pointer-events-none w-[95px] h-[95px] sm:w-[136px] sm:h-[136px]"
-                style={{
-                  top: "14%", left: "33%",
-                  transform: "translate(-50%, -50%)",
-                  animation: "ks-moon-ring 2.2s ease-out infinite",
-                }}
-              />
+                className="absolute pointer-events-none"
+                style={{ top: "30%", left: "54%", transform: "translate(-50%, -50%)" }}
+              >
+                <div
+                  className="rounded-full border-2 border-amber-300/60 w-[95px] h-[95px] sm:w-[136px] sm:h-[136px]"
+                  style={{ animation: "ks-moon-ring 2.2s ease-out infinite" }}
+                />
+              </div>
             )}
             {/* Moon emoji */}
             <span
