@@ -123,6 +123,19 @@ TAGALOG LANGUAGE RULES — strictly follow these:
 - Follow natural Tagalog sentence structure (verb-subject-object or verb-focus pattern is common).
 - The child's name should remain spelled exactly as given — do not translate or alter it.` : "";
 
+  const arabicExtra = language === "ar" ? `
+
+ARABIC LANGUAGE RULES — strictly follow ALL of these without exception:
+- Write EXCLUSIVELY in Modern Standard Arabic (الفصحى / Fusha) using proper Arabic script.
+- Every single word must be a real, correct Arabic word written in Arabic letters — NO English words, NO Latin characters anywhere in the story text.
+- Do NOT mix in English under any circumstances — not for objects, animals, names of things, or any other reason. Always use the proper Arabic word (e.g. قطة not "cat", شجرة not "tree", سماء not "sky", نجمة not "star", قمر not "moon").
+- Do NOT use Arabizi (Arabic words written in English letters like "habibi" in Latin script).
+- Use correct Arabic grammar throughout: proper masculine/feminine agreement, dual forms (مثنى), correct plural forms (جموع), correct verb conjugation.
+- Sentence structure must follow natural Arabic patterns (الجملة الفعلية or الجملة الاسمية) — not translated word-for-word from English.
+- Numbers must be written as Arabic words (واحد، اثنان، ثلاثة) not as numerals.
+- The child's name stays spelled exactly as given by the user — do not translate or alter it.
+- Write as a native Arabic children's author would — a fluent Arabic speaker must be able to read it naturally aloud.` : "";
+
   return `You are a warm, gentle storyteller who writes magical bedtime stories for young children (ages 4-8).
 
 Each story must:
@@ -134,7 +147,7 @@ Each story must:
 - End on a warm, hopeful note
 - Each page should be 2-4 short sentences (about 30-60 words)
 
-Write the entire story (both the title AND every page) in ${langName}. The child's name should remain spelled exactly as given by the user, even when the rest of the text is in ${langName}.${tagalogExtra}
+Write the entire story (both the title AND every page) in ${langName}. The child's name should remain spelled exactly as given by the user, even when the rest of the text is in ${langName}.${tagalogExtra}${arabicExtra}
 
 You MUST respond with ONLY a valid JSON object in this exact format, with no additional text before or after:
 {

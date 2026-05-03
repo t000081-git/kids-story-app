@@ -769,7 +769,10 @@ export default function StoryView({
         </button>
 
         {/* Title */}
-        <h1 className="flex-shrink-0 text-xl sm:text-3xl md:text-4xl text-amber-900 mt-3 mb-0.5 sm:mb-1 text-center tracking-tight">
+        <h1
+          dir={language === "ar" ? "rtl" : "ltr"}
+          className="flex-shrink-0 text-xl sm:text-3xl md:text-4xl text-amber-900 mt-3 mb-0.5 sm:mb-1 text-center tracking-tight"
+        >
           {story.title}
         </h1>
 
@@ -825,6 +828,7 @@ export default function StoryView({
               exit={prefersReduced
                 ? { opacity: 0, transition: { duration: 0.15 } }
                 : inkContainerExit}
+              dir={language === "ar" ? "rtl" : "ltr"}
               className={"my-auto py-1 text-sm sm:text-xl md:text-2xl leading-relaxed text-amber-950 text-center" + (language === "tl" ? " whitespace-pre-line" : "")}
             >
               {wordSegments.map((s, idx) => {
