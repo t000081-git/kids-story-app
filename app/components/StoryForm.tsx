@@ -299,7 +299,7 @@ export default function StoryForm({
                     right anchor y=34 (higher, toward upper-right gold),
                     controls y=68/56 give a smooth CW-rotated arc that traces
                     the centre of the crescent body diagonally. */}
-                <path id="ks-moon-cta" d="M 18,58 C 32,68 78,44 94,34" fill="none" />
+                <path id="ks-moon-cta" d="M 33,57 C 50,65 78,40 94,32" fill="none" />
               </defs>
               <text style={{
                 fill: "rgba(10, 6, 38, 0.90)",
