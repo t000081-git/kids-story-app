@@ -1019,13 +1019,18 @@ export default function StoryView({
               {isPlaying ? "■ Stop" : isFetching ? "⏳ Loading…" : "▶ Read to me"}
             </button>
 
-            {/* Auto-narration checkbox: advances pages automatically until the end */}
-            <label className="flex items-center gap-1.5 cursor-pointer select-none group">
-              <button
-                type="button"
+            {/* Auto-narration checkbox
+                Using <div> not <label> — a <label> wrapping a <button> fires
+                the button's onClick twice (once directly, once via label's
+                activation behaviour), causing every text-click to double-toggle
+                and appear stuck. A plain div has no such side-effect. */}
+            <div
+              className="flex items-center gap-1.5 cursor-pointer select-none group"
+              onClick={() => setAutoNarrate((v) => !v)}
+            >
+              <div
                 role="checkbox"
                 aria-checked={autoNarrate}
-                onClick={() => setAutoNarrate((v) => !v)}
                 className={`w-4 h-4 rounded border-2 flex items-center justify-center
                             transition-colors flex-shrink-0
                             ${autoNarrate
@@ -1035,22 +1040,20 @@ export default function StoryView({
                 {autoNarrate && (
                   <span className="text-white text-[9px] font-bold leading-none">✓</span>
                 )}
-              </button>
-              <span
-                onClick={() => setAutoNarrate((v) => !v)}
-                className="text-xs text-amber-900/55 group-hover:text-amber-900/80 transition-colors"
-              >
+              </div>
+              <span className="text-xs text-amber-900/55 group-hover:text-amber-900/80 transition-colors">
                 Auto-narration
               </span>
-            </label>
+            </div>
 
-            {/* Lullaby music toggle — always visible */}
-            <label className="flex items-center gap-1.5 cursor-pointer select-none group">
-              <button
-                type="button"
+            {/* Lullaby music toggle — same div-not-label pattern */}
+            <div
+              className="flex items-center gap-1.5 cursor-pointer select-none group"
+              onClick={() => setSing((v) => !v)}
+            >
+              <div
                 role="checkbox"
                 aria-checked={sing}
-                onClick={() => setSing((v) => !v)}
                 className={`w-4 h-4 rounded border-2 flex items-center justify-center
                             transition-colors flex-shrink-0
                             ${sing
@@ -1060,14 +1063,11 @@ export default function StoryView({
                 {sing && (
                   <span className="text-white text-[9px] font-bold leading-none">✓</span>
                 )}
-              </button>
-              <span
-                onClick={() => setSing((v) => !v)}
-                className="text-xs text-amber-900/45 group-hover:text-fuchsia-700/80 transition-colors"
-              >
+              </div>
+              <span className="text-xs text-amber-900/45 group-hover:text-fuchsia-700/80 transition-colors">
                 🎵 Lullaby music
               </span>
-            </label>
+            </div>
           </div>
       </div>
 
