@@ -86,7 +86,7 @@ export default function NightSounds() {
 
     const ctx = ctxRef.current;
 
-    const IDLE_GAIN  = 0.6;
+    const IDLE_GAIN  = 0.4;
     const STORY_GAIN = 0.12;
     const initialMode =
       typeof window !== "undefined" && window.__ksMode === "story"
@@ -123,8 +123,16 @@ export default function NightSounds() {
 
     wind.connect(windFilter).connect(windGain).connect(master);
 
-    // ---- Comet whoosh ----
-    const playWhoosh = () => {
+    // Helper: map an element's screen-centre X to a stereo pan value (-1…+1)
+    const panFromEl = (el: Element | null | undefined): number => {
+      if (!el || typeof window === "undefined") return 0;
+      const rect = el.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      return Math.max(-1, Math.min(1, (cx / window.innerWidth) * 2 - 1));
+    };
+
+    // ---- Comet whoosh — stereo-tracked in real time via rAF ----
+    const playWhoosh = (el: Element | null | undefined) => {
       const now = ctx.currentTime;
       const dur = 2.4;
       const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
@@ -145,13 +153,30 @@ export default function NightSounds() {
       gain.gain.linearRampToValueAtTime(0.04, now + dur * 0.7);
       gain.gain.linearRampToValueAtTime(0, now + dur);
 
-      src.connect(filter).connect(gain).connect(master);
+      // StereoPannerNode tracks the comet's visual X position each animation frame
+      const panner = ctx.createStereoPanner?.() ?? null;
+      if (panner) {
+        src.connect(filter).connect(gain).connect(panner).connect(master);
+        // Live-track position until sound ends
+        const startMs = performance.now();
+        let frameId = 0;
+        const track = () => {
+          if (alive.aborted || performance.now() - startMs > dur * 1000) return;
+          panner.pan.setValueAtTime(panFromEl(el), ctx.currentTime);
+          frameId = requestAnimationFrame(track);
+        };
+        frameId = requestAnimationFrame(track);
+        src.onended = () => cancelAnimationFrame(frameId);
+      } else {
+        src.connect(filter).connect(gain).connect(master);
+      }
+
       src.start(now);
       src.stop(now + dur);
     };
 
-    // ---- Thunder rumble ----
-    const playThunder = () => {
+    // ---- Thunder rumble — pan determined by pulse element's screen position ----
+    const playThunder = (pan = 0) => {
       const now = ctx.currentTime;
       const dur = 3.2;
       const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
@@ -162,19 +187,25 @@ export default function NightSounds() {
 
       const lp  = ctx.createBiquadFilter();
       lp.type   = "lowpass";
-      lp.frequency.value = 320;   // wider band → more audible body on earbuds
+      lp.frequency.value = 320;
 
       const hp  = ctx.createBiquadFilter();
       hp.type   = "highpass";
-      hp.frequency.value = 30;    // keep sub-bass where earbuds can reproduce it
+      hp.frequency.value = 30;
 
       const gain = ctx.createGain();
       gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(0.45, now + 0.45);  // 6× louder peak
+      gain.gain.linearRampToValueAtTime(0.45, now + 0.45);
       gain.gain.linearRampToValueAtTime(0.28, now + 1.1);
       gain.gain.linearRampToValueAtTime(0, now + dur);
 
-      src.connect(lp).connect(hp).connect(gain).connect(master);
+      const panner = ctx.createStereoPanner?.() ?? null;
+      if (panner) {
+        panner.pan.value = pan;
+        src.connect(lp).connect(hp).connect(gain).connect(panner).connect(master);
+      } else {
+        src.connect(lp).connect(hp).connect(gain).connect(master);
+      }
       src.start(now);
       src.stop(now + dur);
     };
@@ -282,11 +313,12 @@ export default function NightSounds() {
 
       document
         .querySelectorAll(".ks-comet")
-        .forEach((el) => scheduleForElement(el, playWhoosh, 1200));
+        .forEach((el) => scheduleForElement(el, () => playWhoosh(el), 1200));
 
       const pulseEls = document.querySelectorAll(".ks-pulse");
-      scheduleForElement(pulseEls[0], playThunder, 12880);
-      scheduleForElement(pulseEls[1], playThunder, 17480);
+      // Pan each thunder rumble toward the side its lightning pulse lives on
+      scheduleForElement(pulseEls[0], () => playThunder(panFromEl(pulseEls[0])), 12880);
+      scheduleForElement(pulseEls[1], () => playThunder(panFromEl(pulseEls[1])), 17480);
 
       scheduleCricket(3800,  200);
       scheduleCricket(4500,  900);
