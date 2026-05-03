@@ -73,9 +73,12 @@ function getZones(wide: boolean): Zone[] {
   return [top, leftUpper, rightUpper, top, leftLower, rightLower, bottom];
 }
 
-function posFor(story: SavedStory, idx: number, wide: boolean) {
-  const zones = getZones(wide);
-  const zone  = zones[idx % zones.length];
+function posFor(story: SavedStory, wide: boolean) {
+  const zones   = getZones(wide);
+  // Zone is seeded from the story id (same seed as x/y) so the position is
+  // fully stable — deleting any other story never shifts remaining stars.
+  const zoneIdx = Math.floor(rand(story.id, 2) * zones.length);
+  const zone    = zones[zoneIdx];
   return {
     x: zone.x0 + rand(story.id, 0) * (zone.x1 - zone.x0),
     y: zone.y0 + rand(story.id, 1) * (zone.y1 - zone.y0),
@@ -188,11 +191,11 @@ export default function SavedStoryStars() {
       style={{ zIndex: 50 }}
       aria-hidden="true"
     >
-      {stories.map((story, i) => {
-        const pos     = posFor(story, i, wide);
+      {stories.map((story) => {
+        const pos     = posFor(story, wide);
         const isGalaxy = !!story.shareUrl;
         const size    = Math.round(SIZES[Math.min((story.rating || 1) - 1, 4)] * (isGalaxy ? 1.25 : 1));
-        const delay   = rand(story.id, 2) * 3;
+        const delay   = rand(story.id, 3) * 3;
         // Stars twinkle fast (2.2–4s); galaxies spin slowly (15–25s)
         const dur     = isGalaxy
           ? 15 + rand(story.id, 3) * 10
