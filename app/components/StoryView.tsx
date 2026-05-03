@@ -596,6 +596,14 @@ export default function StoryView({
       return;
     }
 
+    // If ElevenLabs is not configured, go straight to Web Speech — MUST happen
+    // synchronously here (before any await) so the browser's user-gesture context
+    // is still active when speechSynthesis.speak() is called.
+    if (process.env.NEXT_PUBLIC_ELEVENLABS_ENABLED !== "true") {
+      if (supported) playWebSpeech();
+      return;
+    }
+
     // 1. In-memory cache (fastest — already decoded AudioBuffer)
     const cached = pageAudioRef.current.get(pageIdx);
     if (cached) {
