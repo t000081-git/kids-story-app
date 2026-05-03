@@ -236,6 +236,15 @@ body {
   to   { opacity: 1; transform: translateY(0)    scale(1);    }
 }
 
+/* Newborn star pop-in — plays on the wrapper div of the revealed star right
+   after the poof explosion so the star materialises at the same position. */
+@keyframes ks-star-popin {
+  0%   { transform: scale(0);    opacity: 0; }
+  60%  { transform: scale(1.45); opacity: 1; }
+  80%  { transform: scale(0.88); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+
 /* Poof explosion — three animations used together at the star position */
 @keyframes ks-poof-ring {
   0%   { transform: scale(0.25); opacity: 0.9; }

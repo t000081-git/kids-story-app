@@ -128,6 +128,9 @@ export default function SavedStoryStars() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [wide,          setWide]          = useState(false);
   const [inStory,       setInStory]       = useState(false);
+  // revealedId: the story that just had its star born via the poof animation.
+  // While in story mode we show ONLY this star (with a pop-in animation).
+  const [revealedId,    setRevealedId]    = useState<string | null>(null);
   const hideTimeout       = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Ref mirror of confirmDelete so scheduleHide always reads the live value
@@ -184,21 +187,33 @@ export default function SavedStoryStars() {
     const onResize  = () => setWide(window.innerWidth >= 640);
     const onUpdated = () => refresh();
     const onMode    = (e: Event) => {
-      setInStory((e as CustomEvent<{ mode: string }>).detail?.mode === "story");
+      const entering = (e as CustomEvent<{ mode: string }>).detail?.mode === "story";
+      setInStory(entering);
+      // Leaving story mode — clear any pending reveal so all stars show normally
+      if (!entering) setRevealedId(null);
+    };
+    // Fired by StoryView when the poof animation finishes; shows the newborn
+    // star at its position even while the reading view is still open.
+    const onReveal  = (e: Event) => {
+      const { storyId } = (e as CustomEvent<{ storyId: string }>).detail ?? {};
+      if (storyId) setRevealedId(storyId);
     };
 
     window.addEventListener("resize",             onResize);
     window.addEventListener("ks-stories-updated", onUpdated);
     window.addEventListener("ks-mode",            onMode);
+    window.addEventListener("ks-reveal-star",     onReveal);
     return () => {
       window.removeEventListener("resize",             onResize);
       window.removeEventListener("ks-stories-updated", onUpdated);
       window.removeEventListener("ks-mode",            onMode);
+      window.removeEventListener("ks-reveal-star",     onReveal);
     };
   }, []);
 
-  // Hidden while reading a story, or when no saves exist yet
-  if (inStory || stories.length === 0) return null;
+  // Hidden while reading a story, unless a star was just revealed via poof
+  if (stories.length === 0) return null;
+  if (inStory && !revealedId) return null;
 
   return (
     // z-[50] puts stars above the main content layer (z-20) so they're
@@ -212,15 +227,19 @@ export default function SavedStoryStars() {
       aria-hidden="true"
     >
       {stories.map((story) => {
-        const pos     = posFor(story, wide);
+        // In story mode: show only the just-revealed star (newborn via poof)
+        if (inStory && story.id !== revealedId) return null;
+
+        const pos      = posFor(story, wide);
         const isGalaxy = !!story.shareUrl;
-        const size    = Math.round(SIZES[Math.min((story.rating || 1) - 1, 4)] * (isGalaxy ? 1.25 : 1));
-        const delay   = rand(story.id, 3) * 3;
+        const size     = Math.round(SIZES[Math.min((story.rating || 1) - 1, 4)] * (isGalaxy ? 1.25 : 1));
+        const delay    = rand(story.id, 3) * 3;
         // Stars twinkle fast (2.2–4s); galaxies spin slowly (15–25s)
-        const dur     = isGalaxy
+        const dur      = isGalaxy
           ? 15 + rand(story.id, 3) * 10
           : 2.2 + rand(story.id, 3) * 1.8;
-        const isHov   = hovered === story.id;
+        const isHov    = hovered === story.id;
+        const isNew    = story.id === revealedId;
 
         // ── Tooltip placement: keep within all four screen edges ──────────
         // Vertical: show below star when near top (y < 22), else above
@@ -262,16 +281,22 @@ export default function SavedStoryStars() {
             onClick={() => loadStory(story)}
           >
             {/* Star / galaxy shape — data-story-id lets the toast locate
-                this element to fly towards it on save. */}
-            <div
-              data-story-id={story.id}
-              className={isGalaxy ? "ks-galaxy-star" : "ks-saved-star"}
-              style={{
-                width: size, height: size,
-                "--anim-delay": `${delay}s`,
-                "--anim-dur":   `${dur}s`,
-              } as React.CSSProperties}
-            />
+                this element to fly towards it on save.
+                isNew → wrapped in a pop-in scale animation so the star
+                materialises right where the poof exploded. */}
+            <div style={isNew ? {
+              animation: "ks-star-popin 0.55s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards",
+            } : {}}>
+              <div
+                data-story-id={story.id}
+                className={isGalaxy ? "ks-galaxy-star" : "ks-saved-star"}
+                style={{
+                  width: size, height: size,
+                  "--anim-delay": `${delay}s`,
+                  "--anim-dur":   `${dur}s`,
+                } as React.CSSProperties}
+              />
+            </div>
 
             {/* Tooltip — sticky: stays open when mouse moves into tooltip.
                 stopPropagation prevents clicks inside from firing the outer

@@ -710,9 +710,13 @@ export default function StoryView({
     // fly → poof (pill has arrived)
     toastTimers.current.push(setTimeout(() =>
       setToast(t => t ? { ...t, phase: 'poof' } : null), 4000 + FLY_DUR));
-    // poof → gone
-    toastTimers.current.push(setTimeout(() =>
-      setToast(null), 4000 + FLY_DUR + POOF_DUR));
+    // poof → gone + reveal the star at its position
+    toastTimers.current.push(setTimeout(() => {
+      setToast(null);
+      window.dispatchEvent(
+        new CustomEvent("ks-reveal-star", { detail: { storyId, isGalaxy } })
+      );
+    }, 4000 + FLY_DUR + POOF_DUR));
   }
 
   // When the toast enters 'fly', compute displacement pill-centre → star-centre
