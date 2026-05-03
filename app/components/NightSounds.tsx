@@ -162,16 +162,16 @@ export default function NightSounds() {
 
       const lp  = ctx.createBiquadFilter();
       lp.type   = "lowpass";
-      lp.frequency.value = 130;
+      lp.frequency.value = 320;   // wider band → more audible body on earbuds
 
       const hp  = ctx.createBiquadFilter();
       hp.type   = "highpass";
-      hp.frequency.value = 45;
+      hp.frequency.value = 30;    // keep sub-bass where earbuds can reproduce it
 
       const gain = ctx.createGain();
       gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(0.075, now + 0.45);
-      gain.gain.linearRampToValueAtTime(0.05, now + 1.1);
+      gain.gain.linearRampToValueAtTime(0.45, now + 0.45);  // 6× louder peak
+      gain.gain.linearRampToValueAtTime(0.28, now + 1.1);
       gain.gain.linearRampToValueAtTime(0, now + dur);
 
       src.connect(lp).connect(hp).connect(gain).connect(master);
