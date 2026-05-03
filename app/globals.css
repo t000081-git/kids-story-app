@@ -230,14 +230,10 @@ body {
   }
 }
 
-/* Sky toast — slides up, holds, then floats away.
-   translateX(-50%) lives on the outer wrapper div (not here) so the
-   animation never clobbers the centering transform. */
-@keyframes ks-toast {
-  0%   { opacity: 0; transform: translateY(14px); }
-  12%  { opacity: 1; transform: translateY(0);    }
-  78%  { opacity: 1; transform: translateY(0);    }
-  100% { opacity: 0; transform: translateY(-8px); }
+/* Sky toast slide-in — the JS phase machine handles hold + fly exit. */
+@keyframes ks-toast-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
 }
 
 @media (prefers-reduced-motion: reduce) {

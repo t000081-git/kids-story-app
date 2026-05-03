@@ -194,8 +194,13 @@ export default function StoryView({
   const [sing, setSing]                   = useState(false);
   const [isSavingCloud, setIsSavingCloud] = useState(false);
   const [isFetching,   setIsFetching]    = useState(false); // loading EL audio
-  const [toast,        setToast]         = useState<string | null>(null);
-  const toastTimerRef                    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Toast phase machine: 'in' → slide up  |  'hold' → stay visible  |  'fly' → launch to star
+  type ToastPhase = 'in' | 'hold' | 'fly';
+  type ToastInfo  = { message: string; storyId: string; phase: ToastPhase };
+  const [toast,        setToast]    = useState<ToastInfo | null>(null);
+  const [flyStyle,     setFlyStyle] = useState<React.CSSProperties>({});
+  const toastWrapRef                = useRef<HTMLDivElement | null>(null);
+  const toastTimers                 = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Stable voice index for Tagalog — picked once per story session so all
   // pages use the same narrator voice rather than changing page-to-page.
@@ -673,12 +678,55 @@ export default function StoryView({
   // freshest version of handleListen (with the right pageIdx in closure).
   handleListenRef.current = handleListen;
 
-  function showToast(message: string) {
-    // Cancel any in-flight toast so rapid saves don't stack
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToast(message);
-    toastTimerRef.current = setTimeout(() => setToast(null), 3400);
+  function showToast(message: string, storyId: string) {
+    // Cancel any in-flight toast
+    toastTimers.current.forEach(clearTimeout);
+    toastTimers.current = [];
+    setFlyStyle({});
+    setToast({ message, storyId, phase: 'in' });
+    // Settle into 'hold' after the slide-in completes
+    toastTimers.current.push(setTimeout(() =>
+      setToast(t => t ? { ...t, phase: 'hold' } : null), 420));
+    // Launch 'fly' after 4 s
+    toastTimers.current.push(setTimeout(() =>
+      setToast(t => t ? { ...t, phase: 'fly' } : null), 4000));
+    // Remove from DOM after fly lands (~0.75 s)
+    toastTimers.current.push(setTimeout(() => setToast(null), 4800));
   }
+
+  // When the toast enters 'fly' phase, calculate the displacement from the
+  // pill's current centre to the target star/galaxy and apply a CSS transition.
+  useEffect(() => {
+    if (toast?.phase !== 'fly') return;
+    const wrap = toastWrapRef.current;
+    if (!wrap) return;
+
+    requestAnimationFrame(() => {
+      const star  = document.querySelector<HTMLElement>(`[data-story-id="${toast.storyId}"]`);
+      const wRect = wrap.getBoundingClientRect();
+      const cx    = wRect.left + wRect.width  / 2;
+      const cy    = wRect.top  + wRect.height / 2;
+
+      // Default: float up and vanish if the star isn't on screen yet
+      let tx = 0, ty = -80;
+      if (star) {
+        const sRect = star.getBoundingClientRect();
+        tx = (sRect.left + sRect.width  / 2) - cx;
+        ty = (sRect.top  + sRect.height / 2) - cy;
+      }
+
+      setFlyStyle({
+        // translateX(-50%) keeps the centering; translate(tx,ty) flies to star; scale shrinks to a dot
+        transform:  `translateX(calc(-50% + ${tx}px)) translateY(${ty}px) scale(0.05)`,
+        opacity:    0,
+        transition: [
+          "transform 0.72s cubic-bezier(0.55, 0.05, 1, 0.5)",
+          "opacity   0.50s ease-in 0.18s",
+        ].join(", "),
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toast?.phase]);
 
   function handleSave() {
     if (!onSave || rating === 0) return;
@@ -691,7 +739,7 @@ export default function StoryView({
       userAgent: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
     });
     setSavedEntry(entry);
-    showToast("⭐ A new star has been added to your night sky!");
+    showToast("⭐ A new star has been added to your night sky!", entry.id);
   }
 
   /** Save story to Vercel KV → get short URL → turn local star into galaxy. */
@@ -711,7 +759,7 @@ export default function StoryView({
       updateSavedStory(savedEntry.id, { shareUrl: fullUrl });
       window.dispatchEvent(new CustomEvent("ks-stories-updated"));
       setIsPermanent(true);
-      showToast("🌌 A galaxy has bloomed in your sky — link copied!");
+      showToast("🌌 A galaxy has bloomed in your sky — link copied!", savedEntry.id);
       navigator.clipboard?.writeText(fullUrl).then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2500);
@@ -1037,18 +1085,30 @@ export default function StoryView({
       </div>
     </div>
 
-    {/* ── Sky toast — floats up when a star or galaxy is saved ──
-        Two-div split: outer centres via translateX(-50%), inner animates
-        (same pattern as moon ring — prevents animation overriding inline transform). */}
+    {/* ── Sky toast — 3-phase: slide in → hold 4 s → fly to star/galaxy ──
+        Outer div: handles horizontal centering + fly transform (JS-driven).
+        Inner div: slide-in animation on 'in' phase only.               */}
     {toast && (
       <div
-        key={toast}
-        className="fixed bottom-20 left-1/2 z-50 pointer-events-none"
-        style={{ transform: "translateX(-50%)" }}
+        ref={toastWrapRef}
+        key={toast.storyId}
+        className="fixed z-50 pointer-events-none"
+        style={{
+          bottom: "5rem",
+          left: "50%",
+          transform: "translateX(-50%)",
+          ...flyStyle,
+        }}
       >
-        <div style={{ animation: "ks-toast 3.4s ease-in-out forwards" }}>
+        <div
+          style={{
+            animation: toast.phase === "in"
+              ? "ks-toast-in 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) forwards"
+              : undefined,
+          }}
+        >
           <div className="flex items-center gap-2.5 rounded-2xl border border-amber-300/30 bg-[rgba(10,6,38,0.92)] backdrop-blur-sm px-5 py-3 text-sm text-amber-100 shadow-xl shadow-black/40 whitespace-nowrap">
-            {toast}
+            {toast.message}
           </div>
         </div>
       </div>

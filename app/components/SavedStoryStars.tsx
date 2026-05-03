@@ -241,8 +241,10 @@ export default function SavedStoryStars() {
             }}
             onClick={() => loadStory(story)}
           >
-            {/* Star / galaxy shape */}
+            {/* Star / galaxy shape — data-story-id lets the toast locate
+                this element to fly towards it on save. */}
             <div
+              data-story-id={story.id}
               className={isGalaxy ? "ks-galaxy-star" : "ks-saved-star"}
               style={{
                 width: size, height: size,
