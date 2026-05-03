@@ -1019,55 +1019,44 @@ export default function StoryView({
               {isPlaying ? "■ Stop" : isFetching ? "⏳ Loading…" : "▶ Read to me"}
             </button>
 
-            {/* Auto-narration checkbox
-                Using <div> not <label> — a <label> wrapping a <button> fires
-                the button's onClick twice (once directly, once via label's
-                activation behaviour), causing every text-click to double-toggle
-                and appear stuck. A plain div has no such side-effect. */}
-            <div
-              className="flex items-center gap-1.5 cursor-pointer select-none group"
+            {/* Auto-narration — single <button> so the entire pill is one
+                click target; no label/activation-behaviour double-fire. */}
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={autoNarrate}
               onClick={() => setAutoNarrate((v) => !v)}
+              className={`flex items-center gap-1.5 select-none rounded-lg px-2.5 py-1.5
+                          border transition-colors text-xs
+                          ${autoNarrate
+                            ? "border-amber-700/60 bg-amber-700/10 text-amber-900"
+                            : "border-amber-900/20 bg-transparent text-amber-900/55 hover:border-amber-700/40 hover:text-amber-900/80"}`}
             >
-              <div
-                role="checkbox"
-                aria-checked={autoNarrate}
-                className={`w-4 h-4 rounded border-2 flex items-center justify-center
-                            transition-colors flex-shrink-0
-                            ${autoNarrate
-                              ? "bg-amber-700 border-amber-700"
-                              : "border-amber-900/30 bg-transparent group-hover:border-amber-700/50"}`}
-              >
-                {autoNarrate && (
-                  <span className="text-white text-[9px] font-bold leading-none">✓</span>
-                )}
-              </div>
-              <span className="text-xs text-amber-900/55 group-hover:text-amber-900/80 transition-colors">
-                Auto-narration
+              <span className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors
+                                ${autoNarrate ? "bg-amber-700 border-amber-700" : "border-amber-900/40"}`}>
+                {autoNarrate && <span className="text-white text-[8px] font-bold leading-none">✓</span>}
               </span>
-            </div>
+              Auto-narration
+            </button>
 
-            {/* Lullaby music toggle — same div-not-label pattern */}
-            <div
-              className="flex items-center gap-1.5 cursor-pointer select-none group"
+            {/* Lullaby music — same pattern */}
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={sing}
               onClick={() => setSing((v) => !v)}
+              className={`flex items-center gap-1.5 select-none rounded-lg px-2.5 py-1.5
+                          border transition-colors text-xs
+                          ${sing
+                            ? "border-fuchsia-600/60 bg-fuchsia-600/10 text-fuchsia-800"
+                            : "border-amber-900/20 bg-transparent text-amber-900/45 hover:border-fuchsia-500/40 hover:text-fuchsia-700/80"}`}
             >
-              <div
-                role="checkbox"
-                aria-checked={sing}
-                className={`w-4 h-4 rounded border-2 flex items-center justify-center
-                            transition-colors flex-shrink-0
-                            ${sing
-                              ? "bg-fuchsia-600 border-fuchsia-600"
-                              : "border-amber-900/30 bg-transparent group-hover:border-fuchsia-500/50"}`}
-              >
-                {sing && (
-                  <span className="text-white text-[9px] font-bold leading-none">✓</span>
-                )}
-              </div>
-              <span className="text-xs text-amber-900/45 group-hover:text-fuchsia-700/80 transition-colors">
-                🎵 Lullaby music
+              <span className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors
+                                ${sing ? "bg-fuchsia-600 border-fuchsia-600" : "border-amber-900/40"}`}>
+                {sing && <span className="text-white text-[8px] font-bold leading-none">✓</span>}
               </span>
-            </div>
+              🎵 Lullaby music
+            </button>
           </div>
       </div>
 
