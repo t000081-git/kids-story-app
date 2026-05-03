@@ -7,7 +7,7 @@ import { scheduleMelody, getMelodyStyle, getMelodyLoopDur } from "@/lib/lullaby-
 import { getAudioCache, setAudioCache } from "@/lib/audio-cache";
 import type { SavedStory, ShareableStory } from "@/lib/saved-stories";
 import { buildShareUrl, updateSavedStory } from "@/lib/saved-stories";
-import { parseBrowser, parseOS } from "./SavedStoryStars";
+import { parseBrowser, parseOS, starViewportPos } from "./SavedStoryStars";
 
 // ─── ElevenLabs alignment type ───────────────────────────────────────────────
 type ELAlignment = {
@@ -716,35 +716,27 @@ export default function StoryView({
   }
 
   // When the toast enters 'fly', compute displacement pill-centre → star-centre
-  // and slide the pill there (arrives visible; poof handles the exit).
+  // using the same seeded-random math as SavedStoryStars — no DOM query needed,
+  // so it works even when the star component is hidden (inStory mode).
   useEffect(() => {
     if (toast?.phase !== 'fly') return;
     const wrap = toastWrapRef.current;
     if (!wrap) return;
 
     requestAnimationFrame(() => {
-      const star  = document.querySelector<HTMLElement>(`[data-story-id="${toast.storyId}"]`);
-      const wRect = wrap.getBoundingClientRect();
-      const cx    = wRect.left + wRect.width  / 2;
-      const cy    = wRect.top  + wRect.height / 2;
+      const wRect  = wrap.getBoundingClientRect();
+      const cx     = wRect.left + wRect.width  / 2;
+      const cy     = wRect.top  + wRect.height / 2;
 
-      let tx = 0, ty = -100;
-      let starPos = { x: cx, y: cy - 100 };
+      // Deterministic star position — identical to where SavedStoryStars places it
+      const starPos = starViewportPos(toast.storyId);
+      const tx = starPos.x - cx;
+      const ty = starPos.y - cy;
 
-      if (star) {
-        const sRect = star.getBoundingClientRect();
-        const sx = sRect.left + sRect.width  / 2;
-        const sy = sRect.top  + sRect.height / 2;
-        tx = sx - cx;
-        ty = sy - cy;
-        starPos = { x: sx, y: sy };
-      }
-
-      // Store star screen-position so the poof renders at exactly the right spot
+      // Store for poof rendering
       setToast(t => t ? { ...t, starPos } : null);
 
       setFlyStyle({
-        // Pill arrives at star visible — scale shrinks a bit so it "enters" the star
         transform:  `translateX(calc(-50% + ${tx}px)) translateY(${ty}px) scale(0.75)`,
         transition: `transform ${FLY_DUR}ms cubic-bezier(0.4, 0.05, 0.6, 0.95)`,
       });

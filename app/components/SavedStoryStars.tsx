@@ -85,6 +85,26 @@ function posFor(story: SavedStory, wide: boolean) {
   };
 }
 
+/**
+ * Compute the viewport pixel position of a star/galaxy without querying the
+ * DOM.  Uses the same seeded-random + zones logic as posFor, so the result
+ * is identical to the rendered position even when the component is hidden
+ * (inStory mode returns null and the elements are not in the DOM).
+ */
+export function starViewportPos(storyId: string): { x: number; y: number } {
+  if (typeof window === "undefined") return { x: 0, y: 0 };
+  const wide    = window.innerWidth >= 640;
+  const zones   = getZones(wide);
+  const zoneIdx = Math.floor(rand(storyId, 2) * zones.length);
+  const zone    = zones[zoneIdx];
+  const xPct    = zone.x0 + rand(storyId, 0) * (zone.x1 - zone.x0);
+  const yPct    = zone.y0 + rand(storyId, 1) * (zone.y1 - zone.y0);
+  return {
+    x: (xPct / 100) * window.innerWidth,
+    y: (yPct / 100) * window.innerHeight,
+  };
+}
+
 // ── Browser / OS helpers (also exported for StoryView provenance badge) ───────
 export function parseBrowser(ua: string): string {
   if (/Edg/i.test(ua))     return "Edge";
