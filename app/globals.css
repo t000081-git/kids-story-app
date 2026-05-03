@@ -95,6 +95,13 @@ body {
   99%  { opacity: 0;    }
 }
 
+/* Moon clickability ring — expands + fades from the golden moon to signal interactivity */
+@keyframes ks-moon-ring {
+  0%   { transform: scale(0.90); opacity: 0.65; }
+  65%  { transform: scale(1.35); opacity: 0;    }
+  100% { transform: scale(1.35); opacity: 0;    }
+}
+
 /* Karaoke-style highlight on the word currently being read aloud.
    Warm gold glow — cozy and bedtime-magical, not flashy.
    NO padding/margin: those change element width and cause text reflow

@@ -256,7 +256,7 @@ export default function StoryForm({
         <button
           type="submit"
           disabled={isLoading || !nameValid || !customValid}
-          className="fixed z-10 focus:outline-none group disabled:cursor-not-allowed"
+          className="fixed z-10 focus:outline-none group disabled:cursor-not-allowed hover:scale-[1.06] transition-transform duration-200"
           style={{ right: "7%", top: "5%" }}
           aria-label={isLoading ? "Writing your story…" : "Tell me a story"}
         >
@@ -270,6 +270,14 @@ export default function StoryForm({
                 : "drop-shadow(0 0 6px rgba(255,200,80,0.15)) saturate(0.5)",
             }}
           >
+            {/* Pulsing ring — visible only when moon is golden/active */}
+            {nameValid && !isLoading && (
+              <div
+                className="absolute inset-[-10px] sm:inset-[-14px] rounded-full border-2 border-amber-300/55 pointer-events-none"
+                style={{ animation: "ks-moon-ring 2.2s ease-out infinite" }}
+              />
+            )}
+
             {/* Inner wrapper: float + glow animation applied here so moon emoji
                 AND SVG text move as a single unit */}
             <div
@@ -302,9 +310,9 @@ export default function StoryForm({
               <text style={{
                 fontFamily: "var(--font-lora), Georgia, serif",
                 fill: "rgba(10, 6, 38, 0.90)",
-                fontSize: "8.5px",
+                fontSize: "10px",
                 fontWeight: "800",
-                letterSpacing: "0.1px",
+                letterSpacing: "0px",
               }}>
                 <textPath href="#ks-moon-cta" startOffset="59%" textAnchor="middle">
                   {isLoading ? "writing…" : "tell me a story"}
