@@ -194,6 +194,8 @@ export default function StoryView({
   const [sing, setSing]                   = useState(false);
   const [isSavingCloud, setIsSavingCloud] = useState(false);
   const [isFetching,   setIsFetching]    = useState(false); // loading EL audio
+  const [toast,        setToast]         = useState<string | null>(null);
+  const toastTimerRef                    = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Stable voice index for Tagalog — picked once per story session so all
   // pages use the same narrator voice rather than changing page-to-page.
@@ -671,6 +673,13 @@ export default function StoryView({
   // freshest version of handleListen (with the right pageIdx in closure).
   handleListenRef.current = handleListen;
 
+  function showToast(message: string) {
+    // Cancel any in-flight toast so rapid saves don't stack
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast(message);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3400);
+  }
+
   function handleSave() {
     if (!onSave || rating === 0) return;
     const entry = onSave({
@@ -682,6 +691,7 @@ export default function StoryView({
       userAgent: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
     });
     setSavedEntry(entry);
+    showToast("⭐ A new star has been added to your night sky!");
   }
 
   /** Save story to Vercel KV → get short URL → turn local star into galaxy. */
@@ -701,6 +711,7 @@ export default function StoryView({
       updateSavedStory(savedEntry.id, { shareUrl: fullUrl });
       window.dispatchEvent(new CustomEvent("ks-stories-updated"));
       setIsPermanent(true);
+      showToast("🌌 A galaxy has bloomed in your sky — link copied!");
       navigator.clipboard?.writeText(fullUrl).then(() => {
         setCopied(true);
         setTimeout(() => setCopied(false), 2500);
@@ -1024,5 +1035,22 @@ export default function StoryView({
         )}
       </div>
     </div>
+
+    {/* ── Sky toast — floats up when a star or galaxy is saved ──
+        Two-div split: outer centres via translateX(-50%), inner animates
+        (same pattern as moon ring — prevents animation overriding inline transform). */}
+    {toast && (
+      <div
+        key={toast}
+        className="fixed bottom-20 left-1/2 z-50 pointer-events-none"
+        style={{ transform: "translateX(-50%)" }}
+      >
+        <div style={{ animation: "ks-toast 3.4s ease-in-out forwards" }}>
+          <div className="flex items-center gap-2.5 rounded-2xl border border-amber-300/30 bg-[rgba(10,6,38,0.92)] backdrop-blur-sm px-5 py-3 text-sm text-amber-100 shadow-xl shadow-black/40 whitespace-nowrap">
+            {toast}
+          </div>
+        </div>
+      </div>
+    )}
   );
 }

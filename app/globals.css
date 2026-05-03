@@ -230,6 +230,16 @@ body {
   }
 }
 
+/* Sky toast — slides up, holds, then floats away.
+   translateX(-50%) lives on the outer wrapper div (not here) so the
+   animation never clobbers the centering transform. */
+@keyframes ks-toast {
+  0%   { opacity: 0; transform: translateY(14px); }
+  12%  { opacity: 1; transform: translateY(0);    }
+  78%  { opacity: 1; transform: translateY(0);    }
+  100% { opacity: 0; transform: translateY(-8px); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ks-twinkle,
   .ks-float,
