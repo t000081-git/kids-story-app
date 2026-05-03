@@ -607,7 +607,8 @@ export default function StoryView({
   // Tries ElevenLabs first (beautiful voice + perfect karaoke timing).
   // Falls back to Web Speech API if EL isn't configured or the request fails.
   async function handleListen() {
-    // Stop button: cancel everything in-flight
+    // Stop button: cancel everything in-flight AND disable auto-narration
+    // so the onended callback can't advance to the next page after a manual stop.
     if (isPlaying || isFetching) {
       window.speechSynthesis?.cancel();
       try { audioSrcRef.current?.stop(); } catch { /* already stopped */ }
@@ -617,6 +618,8 @@ export default function StoryView({
       setIsPlaying(false);
       setIsFetching(false);
       setHighlight(-1);
+      autoNarrateRef.current = false;   // prevent onended from advancing pages
+      setAutoNarrate(false);            // uncheck the checkbox so state is visible
       return;
     }
 
@@ -1049,32 +1052,30 @@ export default function StoryView({
               </span>
             </label>
 
-            {/* Lullaby music toggle — visible for all languages when auto-narrate is on */}
-            {autoNarrate && (
-              <label className="flex items-center gap-1.5 cursor-pointer select-none group">
-                <button
-                  type="button"
-                  role="checkbox"
-                  aria-checked={sing}
-                  onClick={() => setSing((v) => !v)}
-                  className={`w-4 h-4 rounded border-2 flex items-center justify-center
-                              transition-colors flex-shrink-0
-                              ${sing
-                                ? "bg-fuchsia-600 border-fuchsia-600"
-                                : "border-amber-900/30 bg-transparent group-hover:border-fuchsia-500/50"}`}
-                >
-                  {sing && (
-                    <span className="text-white text-[9px] font-bold leading-none">✓</span>
-                  )}
-                </button>
-                <span
-                  onClick={() => setSing((v) => !v)}
-                  className="text-xs text-amber-900/45 group-hover:text-fuchsia-700/80 transition-colors"
-                >
-                  🎵 Lullaby music
-                </span>
-              </label>
-            )}
+            {/* Lullaby music toggle — always visible */}
+            <label className="flex items-center gap-1.5 cursor-pointer select-none group">
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={sing}
+                onClick={() => setSing((v) => !v)}
+                className={`w-4 h-4 rounded border-2 flex items-center justify-center
+                            transition-colors flex-shrink-0
+                            ${sing
+                              ? "bg-fuchsia-600 border-fuchsia-600"
+                              : "border-amber-900/30 bg-transparent group-hover:border-fuchsia-500/50"}`}
+              >
+                {sing && (
+                  <span className="text-white text-[9px] font-bold leading-none">✓</span>
+                )}
+              </button>
+              <span
+                onClick={() => setSing((v) => !v)}
+                className="text-xs text-amber-900/45 group-hover:text-fuchsia-700/80 transition-colors"
+              >
+                🎵 Lullaby music
+              </span>
+            </label>
           </div>
       </div>
 
